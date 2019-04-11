@@ -63,6 +63,17 @@ class S3FileSystemTest(unittest.TestCase):
     with self.assertRaises(ValueError):
       self.fs.join('/bucket/path/', '/to/file')
 
+  def test_split(self):
+    self.assertEqual(('s3://foo/bar', 'baz'),
+                     self.fs.split('s3://foo/bar/baz'))
+    self.assertEqual(('s3://foo', ''),
+                     self.fs.split('s3://foo/'))
+    self.assertEqual(('s3://foo', ''),
+                     self.fs.split('s3://foo'))
+
+    with self.assertRaises(ValueError):
+      self.fs.split('/no/s3/prefix')
+
 
 if __name__ == '__main__':
   logging.getLogger().setLevel(logging.INFO)
