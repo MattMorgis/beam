@@ -50,7 +50,7 @@ def get_version():
   return global_names['__version__']
 
 
-PACKAGE_NAME = 'apache-beam-morgis-fork'
+PACKAGE_NAME = 'apache-beam'
 PACKAGE_VERSION = get_version()
 PACKAGE_DESCRIPTION = 'Apache Beam SDK for Python'
 PACKAGE_URL = 'https://beam.apache.org'
@@ -149,6 +149,10 @@ GCP_REQUIREMENTS = [
     'google-cloud-bigtable==0.31.1',
 ]
 
+AWS_REQUIREMENTS = [
+    'boto3 >='
+]
+
 
 # We must generate protos after setup_requires are installed.
 def generate_protos_first(original_cmd):
@@ -206,6 +210,7 @@ setuptools.setup(
         'docs': ['Sphinx>=1.5.2,<2.0'],
         'test': REQUIRED_TEST_PACKAGES,
         'gcp': GCP_REQUIREMENTS,
+        'aws': AWS_REQUIREMENTS
     },
     zip_safe=False,
     # PyPI package information.
