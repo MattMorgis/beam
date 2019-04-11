@@ -47,6 +47,22 @@ class S3FileSystemTest(unittest.TestCase):
     self.assertEqual(self.fs.scheme(), 's3')
     self.assertEqual(s3filesystem.S3FileSystem.scheme(), 's3')
 
+  def test_join(self):
+    self.assertEqual('s3://bucket/path/to/file',
+                     self.fs.join('s3://bucket/path', 'to', 'file'))
+    self.assertEqual('s3://bucket/path/to/file',
+                     self.fs.join('s3://bucket/path', 'to/file'))
+    self.assertEqual('s3://bucket/path/to/file',
+                     self.fs.join('s3://bucket/path', '/to/file'))
+    self.assertEqual('s3://bucket/path/to/file',
+                     self.fs.join('s3://bucket/path/', 'to', 'file'))
+    self.assertEqual('s3://bucket/path/to/file',
+                     self.fs.join('s3://bucket/path/', 'to/file'))
+    self.assertEqual('s3://bucket/path/to/file',
+                     self.fs.join('s3://bucket/path/', '/to/file'))
+    with self.assertRaises(ValueError):
+      self.fs.join('/bucket/path/', '/to/file')
+
 
 if __name__ == '__main__':
   logging.getLogger().setLevel(logging.INFO)
