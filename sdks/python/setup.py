@@ -150,7 +150,7 @@ GCP_REQUIREMENTS = [
 ]
 
 AWS_REQUIREMENTS = [
-    'boto3 >='
+    'boto3 >=1.9'
 ]
 
 
