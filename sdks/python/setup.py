@@ -166,6 +166,10 @@ GCP_REQUIREMENTS = [
     'google-cloud-bigtable>=0.31.1,<1.1.0',
 ]
 
+AWS_REQUIREMENTS = [
+    'boto3 >=1.9'
+]
+
 
 # We must generate protos after setup_requires are installed.
 def generate_protos_first(original_cmd):
@@ -224,6 +228,7 @@ setuptools.setup(
         'docs': ['Sphinx>=1.5.2,<2.0'],
         'test': REQUIRED_TEST_PACKAGES,
         'gcp': GCP_REQUIREMENTS,
+        'aws': AWS_REQUIREMENTS
     },
     zip_safe=False,
     # PyPI package information.
