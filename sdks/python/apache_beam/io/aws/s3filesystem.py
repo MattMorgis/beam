@@ -89,7 +89,7 @@ class S3FileSystem(FileSystem):
     """Whether this FileSystem supports directories."""
     raise NotImplementedError
 
-  def _list(self, dir_or_prefix): 
+  def _list(self, dir_or_prefix):
     """List files in a location.
 
     Listing is non-recursive, for filesystems that support directories.
