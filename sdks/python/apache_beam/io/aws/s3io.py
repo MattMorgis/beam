@@ -109,6 +109,5 @@ class S3IO(object):
 
     logging.info("Finished listing %s files in %s seconds.",
                 counter, time.time() - start_time)
-    logging.info("Result: %s",
-                file_sizes)
+
     return file_sizes
