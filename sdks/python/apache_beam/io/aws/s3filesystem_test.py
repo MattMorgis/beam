@@ -22,6 +22,7 @@ from __future__ import absolute_import
 
 import logging
 import unittest
+import mock
 
 from apache_beam.io.filesystem import BeamIOError
 from apache_beam.io.filesystem import FileMetadata
@@ -74,7 +75,27 @@ class S3FileSystemTest(unittest.TestCase):
     with self.assertRaises(ValueError):
       self.fs.split('/no/s3/prefix')
 
+  # @mock.patch('apache_beam.io.gcp.gcsfilesystem.gcsio')
+  def test_match_multiples(self):
+    # Prepare mocks.
+    s3io_mock = mock.MagicMock()
+    s3filesystem.s3io.S3IO = lambda: s3io_mock
+    s3io_mock.list_prefix.return_value = {
+        's3://bucket/file1': 1,
+        's3://bucket/file2': 2
+    }
+    expected_results = set([
+        FileMetadata('s3://bucket/file1', 1),
+        FileMetadata('s3://bucket/file2', 2)
+    ])
+    match_result = self.fs.match(['s3://bucket/'])[0]
+    
+    self.assertEqual(
+        set(match_result.metadata_list),
+        expected_results)
+    s3io_mock.list_prefix.assert_called_once_with('s3://bucket/')
+
 
 if __name__ == '__main__':
-  logging.getLogger().setLevel(logging.INFO)
+  logging.getLogger().setLevel(logging.DEBUG)
   unittest.main()

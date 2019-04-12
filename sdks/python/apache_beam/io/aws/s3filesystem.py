@@ -18,11 +18,14 @@
 
 from __future__ import absolute_import
 
+from future.utils import iteritems
+
 from apache_beam.io.filesystem import BeamIOError
 from apache_beam.io.filesystem import CompressedFile
 from apache_beam.io.filesystem import CompressionTypes
 from apache_beam.io.filesystem import FileMetadata
 from apache_beam.io.filesystem import FileSystem
+from apache_beam.io.aws import s3io
 
 __all__ = ['S3FileSystem']
 
@@ -31,7 +34,7 @@ class S3FileSystem(FileSystem):
   """An S3 `FileSystem` implementation for accessing files on AWS S3
   """
 
-  CHUNK_SIZE = 100
+  CHUNK_SIZE = s3io.MAX_BATCH_OPERATION_SIZE
   S3_PREFIX = 's3://'
 
   @classmethod
@@ -83,11 +86,11 @@ class S3FileSystem(FileSystem):
     Raises:
       IOError if leaf directory already exists.
     """
-    raise NotImplementedError
+    pass
 
   def has_dirs(self):
     """Whether this FileSystem supports directories."""
-    raise NotImplementedError
+    return False
 
   def _list(self, dir_or_prefix):
     """List files in a location.
@@ -104,7 +107,11 @@ class S3FileSystem(FileSystem):
     Raises:
       ``BeamIOError`` if listing fails, but not if no files were found.
     """
-    raise NotImplementedError
+    try:
+      for path, size in iteritems(s3io.S3IO().list_prefix(dir_or_prefix)):
+        yield FileMetadata(path, size)
+    except Exception as e:  # pylint: disable=broad-except
+      raise BeamIOError("List operation failed", {dir_or_prefix: e})
 
   def create(self, path, mime_type='application/octet-stream',
              compression_type=CompressionTypes.AUTO):
