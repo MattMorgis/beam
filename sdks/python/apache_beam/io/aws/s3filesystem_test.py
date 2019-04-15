@@ -89,7 +89,7 @@ class S3FileSystemTest(unittest.TestCase):
         FileMetadata('s3://bucket/file2', 2)
     ])
     match_result = self.fs.match(['s3://bucket/'])[0]
-    
+
     self.assertEqual(
         set(match_result.metadata_list),
         expected_results)
@@ -97,5 +97,5 @@ class S3FileSystemTest(unittest.TestCase):
 
 
 if __name__ == '__main__':
-  logging.getLogger().setLevel(logging.DEBUG)
+  logging.getLogger().setLevel(logging.INFO)
   unittest.main()
