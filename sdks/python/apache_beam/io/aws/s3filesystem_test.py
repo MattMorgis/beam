@@ -75,8 +75,8 @@ class S3FileSystemTest(unittest.TestCase):
     with self.assertRaises(ValueError):
       self.fs.split('/no/s3/prefix')
 
-  # @mock.patch('apache_beam.io.gcp.gcsfilesystem.gcsio')
-  def test_match_multiples(self):
+  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
+  def test_match_multiples(self, s3io_mock):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     s3filesystem.s3io.S3IO = lambda: s3io_mock
