@@ -131,6 +131,24 @@ class S3FileSystemTest(unittest.TestCase):
                              r's3://bucket/.*%s' % exception)
     s3io_mock.list_prefix.assert_called_once_with('s3://bucket/')
 
+  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
+  def test_match_multiple_patterns(self, mock_s3io):
+    # Prepare mocks.
+    s3io_mock = mock.MagicMock()
+    s3filesystem.s3io.S3IO = lambda: s3io_mock
+    s3io_mock.list_prefix.side_effect = [
+        {'s3://bucket/file1': 1},
+        {'s3://bucket/file2': 2},
+    ]
+    expected_results = [
+        [FileMetadata('s3://bucket/file1', 1)],
+        [FileMetadata('s3://bucket/file2', 2)]
+    ]
+    result = self.fs.match(['s3://bucket/file1*', 's3://bucket/file2*'])
+    self.assertEqual(
+        [mr.metadata_list for mr in result],
+        expected_results)
+
 
 if __name__ == '__main__':
   logging.getLogger().setLevel(logging.INFO)
