@@ -76,7 +76,7 @@ class S3FileSystemTest(unittest.TestCase):
       self.fs.split('/no/s3/prefix')
 
   @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
-  def test_match_multiples(self, s3io_mock):
+  def test_match_multiples(self, mock_s3io):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     s3filesystem.s3io.S3IO = lambda: s3io_mock
@@ -93,6 +93,42 @@ class S3FileSystemTest(unittest.TestCase):
     self.assertEqual(
         set(match_result.metadata_list),
         expected_results)
+    s3io_mock.list_prefix.assert_called_once_with('s3://bucket/')
+
+  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
+  def test_match_multiples_limit(self, mock_s3io):
+    # Prepare mocks.
+    s3io_mock = mock.MagicMock()
+    limit = 1
+    s3filesystem.s3io.S3IO = lambda: s3io_mock
+    s3io_mock.list_prefix.return_value = {
+        's3://bucket/file1': 1
+    }
+    expected_results = set([
+        FileMetadata('s3://bucket/file1', 1)
+    ])
+    match_result = self.fs.match(['s3://bucket/'], [limit])[0]
+    self.assertEqual(
+        set(match_result.metadata_list),
+        expected_results)
+    self.assertEqual(
+        len(match_result.metadata_list),
+        limit)
+    s3io_mock.list_prefix.assert_called_once_with('s3://bucket/')
+
+  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
+  def test_match_multiples_error(self, mock_s3io):
+    # Prepare mocks.
+    s3io_mock = mock.MagicMock()
+    s3filesystem.s3io.S3IO = lambda: s3io_mock
+    exception = IOError('Failed')
+    s3io_mock.list_prefix.side_effect = exception
+
+    with self.assertRaisesRegexp(BeamIOError,
+                                 r'^Match operation failed') as error:
+      self.fs.match(['s3://bucket/'])
+    self.assertRegexpMatches(str(error.exception.exception_details),
+                             r's3://bucket/.*%s' % exception)
     s3io_mock.list_prefix.assert_called_once_with('s3://bucket/')
 
 
