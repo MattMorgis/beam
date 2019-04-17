@@ -73,7 +73,6 @@ class S3IO(object):
       self.client = client
     else:
       self.client = boto3.client('s3')
-    #self._rewrite_cb = None
 
   @retry.with_exponential_backoff(
       retry_filter=retry.retry_on_server_errors_and_timeout_filter)
@@ -108,6 +107,6 @@ class S3IO(object):
         break
 
     logging.info("Finished listing %s files in %s seconds.",
-                counter, time.time() - start_time)
+                 counter, time.time() - start_time)
 
     return file_sizes
