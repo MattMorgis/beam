@@ -30,7 +30,8 @@ from apache_beam.utils import retry
 try:
   # pylint: disable=wrong-import-order, wrong-import-position
   # pylint: disable=ungrouped-imports
-  import boto3
+  from apache_beam.io.aws.clients.s3 import boto3_client
+  from apache_beam.io.aws.clients.s3 import requests
 except ImportError:
   raise ImportError('Missing `boto3` requirement')
 
@@ -53,26 +54,11 @@ class S3IOError(IOError, retry.PermanentException):
 class S3IO(object):
   """S3 I/O client."""
 
-  # def __new__(cls, client=None):
-  #   if client:
-  #     # This path is only used for testing to inject a fake boto3 client
-  #     return super(S3IO, cls).__new__(cls)
-  #   else:
-  #     local_state = threading.local()
-  #     if getattr(local_state, 's3io_instance', None) is None:
-  #       client = boto3.client('s3')
-  #       local_state.s3io_instance = super(S3IO, cls).__new__(cls)
-  #       local_state.s3io_instance.client = client
-  #     return local_state.s3io_instance
-
   def __init__(self, client=None):
-    # We must do this check on client because the client attribute may
-    # have already been set in __new__ for the singleton case when
-    # client is None.
     if client is not None:
       self.client = client
     else:
-      self.client = boto3.client('s3')
+      self.client = boto3_client.Client()
 
   @retry.with_exponential_backoff(
       retry_filter=retry.retry_on_server_errors_and_timeout_filter)
@@ -86,15 +72,16 @@ class S3IO(object):
       Dictionary of file name -> size.
     """
     bucket, prefix = parse_s3_path(path, object_optional=True)
+    request = requests.ListRequest(bucket=bucket, prefix=prefix)
+
     file_sizes = {}
     counter = 0
     start_time = time.time()
 
     logging.info("Starting the size estimation of the input")
 
-    kwargs = {'Bucket': bucket, 'Prefix': prefix}
     while True:
-      response = self.client.list_objects_v2(**kwargs)
+      response = self.client.list(request)
       for item in response['Contents']:
         file_name = 's3://%s/%s' % (bucket, item['Key'])
         file_sizes[file_name] = item['Size']
@@ -102,7 +89,9 @@ class S3IO(object):
         if counter % 10000 == 0:
           logging.info("Finished computing size of: %s files", len(file_sizes))
       try:
-        kwargs['ContinuationToken'] = response['NextContinuationToken']
+        # TODO(morgis): Handle pagination
+        # kwargs['ContinuationToken'] = response['NextContinuationToken']
+        break
       except KeyError:
         break
 

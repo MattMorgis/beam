@@ -17,27 +17,25 @@
 
 from __future__ import absolute_import
 
-try:
-  # pylint: disable=wrong-import-order, wrong-import-position
-  # pylint: disable=ungrouped-imports
-  import boto3
-except ImportError:
-  raise ImportError('Missing `boto3` requirement')
 
+class ListRequest(object):
 
-class Client(object):
+  def __init__(self, bucket, prefix):
+    self.bucket = bucket
+    self.prefix = prefix
 
-  def __init__(self):
-    self.client = boto3.client('s3')
+  @property
+  def bucket(self):
+    return self._bucket
 
-  def list(self, request):
-    r"""Retrieves a list of objects matching the criteria.
+  @bucket.setter
+  def bucket(self, bucket):
+    self._bucket = bucket
 
-    Args:
-      request: (ListRequest) input message
-    Returns:
-      (Objects) The response message.
-    """
-    response = self.client.list_objects_v2(Bucket=request.bucket,
-                                           Prefix=request.prefix)
-    return response
+  @property
+  def prefix(self):
+    return self._prefix
+  
+  @prefix.setter
+  def prefix(self, prefix):
+    self._prefix = prefix
