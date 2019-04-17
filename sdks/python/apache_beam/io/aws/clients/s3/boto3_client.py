@@ -38,6 +38,11 @@ class Client(object):
     Returns:
       (Objects) The response message.
     """
-    response = self.client.list_objects_v2(Bucket=request.bucket,
-                                           Prefix=request.prefix)
+    kwargs = {'Bucket': request.bucket,
+              'Prefix': request.prefix}
+
+    if request.continuation_token is not None:
+      kwargs['ContinuationToken'] = request.continuation_token
+
+    response = self.client.list_objects_v2(**kwargs)
     return response

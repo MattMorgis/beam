@@ -20,9 +20,10 @@ from __future__ import absolute_import
 
 class ListRequest(object):
 
-  def __init__(self, bucket, prefix):
+  def __init__(self, bucket, prefix, continuation_token=None):
     self.bucket = bucket
     self.prefix = prefix
+    self.continuation_token = continuation_token
 
   @property
   def bucket(self):
@@ -35,7 +36,15 @@ class ListRequest(object):
   @property
   def prefix(self):
     return self._prefix
-  
+
   @prefix.setter
   def prefix(self, prefix):
     self._prefix = prefix
+
+  @property
+  def continuation_token(self):
+    return self._continuation_token
+
+  @continuation_token.setter
+  def continuation_token(self, continuation_token):
+    self._continuation_token = continuation_token

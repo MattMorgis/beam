@@ -89,8 +89,7 @@ class S3IO(object):
         if counter % 10000 == 0:
           logging.info("Finished computing size of: %s files", len(file_sizes))
       try:
-        # TODO(morgis): Handle pagination
-        # kwargs['ContinuationToken'] = response['NextContinuationToken']
+        request.continuation_token = response['NextContinuationToken']
         break
       except KeyError:
         break
