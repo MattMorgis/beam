@@ -21,6 +21,7 @@ try:
   # pylint: disable=wrong-import-order, wrong-import-position
   # pylint: disable=ungrouped-imports
   import boto3
+  from apache_beam.io.aws.clients.s3 import messages
 except ImportError:
   raise ImportError('Missing `boto3` requirement')
 
@@ -44,5 +45,18 @@ class Client(object):
     if request.continuation_token is not None:
       kwargs['ContinuationToken'] = request.continuation_token
 
-    response = self.client.list_objects_v2(**kwargs)
+    boto_response = self.client.list_objects_v2(**kwargs)
+
+    items = [messages.Item(etag=content['ETag'],
+                           key=content['Key'],
+                           last_modified=content['LastModified'],
+                           size=content['Size'])
+             for content in boto_response['Contents']]
+
+    try:
+      next_token = boto_response['NextContinuationToken']
+    except KeyError:
+      next_token = None
+
+    response = messages.ListResponse(items, next_token)
     return response

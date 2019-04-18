@@ -48,3 +48,67 @@ class ListRequest(object):
   @continuation_token.setter
   def continuation_token(self, continuation_token):
     self._continuation_token = continuation_token
+
+
+class ListResponse(object):
+
+  def __init__(self, items, next_token=None):
+    self.items = items
+    self.next_token = next_token
+
+  @property
+  def items(self):
+    return self._items
+
+  @items.setter
+  def items(self, items):
+    self._items = items
+
+  @property
+  def next_token(self):
+    return self._next_token
+
+  @next_token.setter
+  def next_token(self, next_token):
+    self._next_token = next_token
+
+
+class Item(object):
+
+  def __init__(self, etag, key, last_modified, size):
+    self.etag = etag
+    self.key = key
+    self.last_modified = last_modified
+    self.size = size
+
+  @property
+  def etag(self):
+    return self._etag
+
+  @etag.setter
+  def etag(self, etag):
+    self._etag = etag
+
+  @property
+  def key(self):
+    return self._key
+
+  @key.setter
+  def key(self, key):
+    self._key = key
+
+  @property
+  def last_modified(self):
+    return self._last_modified
+
+  @last_modified.setter
+  def last_modified(self, last_modified):
+    self._last_modified = last_modified
+
+  @property
+  def size(self):
+    return self._size
+
+  @size.setter
+  def size(self, size):
+    self._size = size

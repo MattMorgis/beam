@@ -31,7 +31,7 @@ try:
   # pylint: disable=wrong-import-order, wrong-import-position
   # pylint: disable=ungrouped-imports
   from apache_beam.io.aws.clients.s3 import boto3_client
-  from apache_beam.io.aws.clients.s3 import requests
+  from apache_beam.io.aws.clients.s3 import messages
 except ImportError:
   raise ImportError('Missing `boto3` requirement')
 
@@ -72,7 +72,7 @@ class S3IO(object):
       Dictionary of file name -> size.
     """
     bucket, prefix = parse_s3_path(path, object_optional=True)
-    request = requests.ListRequest(bucket=bucket, prefix=prefix)
+    request = messages.ListRequest(bucket=bucket, prefix=prefix)
 
     file_sizes = {}
     counter = 0
@@ -82,16 +82,15 @@ class S3IO(object):
 
     while True:
       response = self.client.list(request)
-      for item in response['Contents']:
-        file_name = 's3://%s/%s' % (bucket, item['Key'])
-        file_sizes[file_name] = item['Size']
+      for item in response.items:
+        file_name = 's3://%s/%s' % (bucket, item.key)
+        file_sizes[file_name] = item.size
         counter += 1
         if counter % 10000 == 0:
           logging.info("Finished computing size of: %s files", len(file_sizes))
-      try:
-        request.continuation_token = response['NextContinuationToken']
-        break
-      except KeyError:
+      if response.next_token:
+        request.continuation_token = response.next_token
+      else:
         break
 
     logging.info("Finished listing %s files in %s seconds.",
