@@ -15,23 +15,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.beam.sdk.coders;
+package org.apache.beam.sdk.testing;
 
-import static org.junit.Assert.assertEquals;
-
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
-
-/** Tests for {@link BooleanCoder}. */
-@RunWith(JUnit4.class)
-public class BooleanCoderTest {
-  private static final Coder<Boolean> TEST_CODER = BooleanCoder.of();
-
-  @Test
-  public void testStructuralValueReturnTheSameValue() {
-    Boolean expected = Boolean.TRUE;
-    Object actual = TEST_CODER.structuralValue(expected);
-    assertEquals(expected, actual);
-  }
-}
+/**
+ * Category tag for validation tests which use cross-language transforms. Tests tagged with {@link
+ * UsesCrossLanguageTransforms} should be run for runners which support cross-language transforms.
+ */
+public interface UsesCrossLanguageTransforms {}

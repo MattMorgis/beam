@@ -21,7 +21,9 @@ import com.google.auto.service.AutoService;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.util.ArrayDeque;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
@@ -49,7 +51,7 @@ import org.apache.beam.sdk.values.PCollectionList;
 import org.apache.beam.sdk.values.PCollectionTuple;
 import org.apache.beam.sdk.values.PDone;
 import org.apache.beam.sdk.values.PInput;
-import org.apache.beam.sdk.values.PValue;
+import org.apache.beam.sdk.values.POutput;
 import org.apache.beam.sdk.values.TupleTag;
 import org.apache.beam.vendor.grpc.v1p13p1.io.grpc.Server;
 import org.apache.beam.vendor.grpc.v1p13p1.io.grpc.ServerBuilder;
@@ -186,7 +188,8 @@ public class ExpansionService extends ExpansionServiceGrpc.ExpansionServiceImplB
     private static Coder resolveCoder(List<String> coderUrns) throws Exception {
       Preconditions.checkArgument(coderUrns.size() > 0, "No Coder URN provided.");
       RunnerApi.Components.Builder componentsBuilder = RunnerApi.Components.newBuilder();
-      RunnerApi.Coder coder = buildProto(0, coderUrns, componentsBuilder);
+      Deque<String> coderQueue = new ArrayDeque<>(coderUrns);
+      RunnerApi.Coder coder = buildProto(coderQueue, componentsBuilder);
 
       RehydratedComponents rehydratedComponents =
           RehydratedComponents.forComponents(componentsBuilder.build());
@@ -194,11 +197,10 @@ public class ExpansionService extends ExpansionServiceGrpc.ExpansionServiceImplB
     }
 
     private static RunnerApi.Coder buildProto(
-        int coderPos, List<String> coderUrns, RunnerApi.Components.Builder componentsBuilder) {
-      Preconditions.checkArgument(
-          coderPos < coderUrns.size(), "Pointer into coderURNs is not correct.");
+        Deque<String> coderUrns, RunnerApi.Components.Builder componentsBuilder) {
+      Preconditions.checkArgument(coderUrns.size() > 0, "No URNs left to construct coder from");
 
-      final String coderUrn = coderUrns.get(coderPos);
+      final String coderUrn = coderUrns.pop();
       RunnerApi.Coder.Builder coderBuilder =
           RunnerApi.Coder.newBuilder()
               .setSpec(
@@ -207,13 +209,13 @@ public class ExpansionService extends ExpansionServiceGrpc.ExpansionServiceImplB
                       .build());
 
       if (coderUrn.equals(BeamUrns.getUrn(RunnerApi.StandardCoders.Enum.ITERABLE))) {
-        RunnerApi.Coder elementCoder = buildProto(coderPos + 1, coderUrns, componentsBuilder);
+        RunnerApi.Coder elementCoder = buildProto(coderUrns, componentsBuilder);
         String coderId = UUID.randomUUID().toString();
         componentsBuilder.putCoders(coderId, elementCoder);
         coderBuilder.addComponentCoderIds(coderId);
       } else if (coderUrn.equals(BeamUrns.getUrn(RunnerApi.StandardCoders.Enum.KV))) {
-        RunnerApi.Coder element1Coder = buildProto(coderPos + 1, coderUrns, componentsBuilder);
-        RunnerApi.Coder element2Coder = buildProto(coderPos + 2, coderUrns, componentsBuilder);
+        RunnerApi.Coder element1Coder = buildProto(coderUrns, componentsBuilder);
+        RunnerApi.Coder element2Coder = buildProto(coderUrns, componentsBuilder);
         String coderId1 = UUID.randomUUID().toString();
         String coderId2 = UUID.randomUUID().toString();
         componentsBuilder.putCoders(coderId1, element1Coder);
@@ -242,10 +244,10 @@ public class ExpansionService extends ExpansionServiceGrpc.ExpansionServiceImplB
    * Provides a mapping of {@link RunnerApi.FunctionSpec} to a {@link PTransform}, together with
    * mappings of its inputs and outputs to maps of PCollections.
    *
-   * @param <InputT> input {@link PValue} type of the transform
-   * @param <OutputT> output {@link PValue} type of the transform
+   * @param <InputT> input {@link PInput} type of the transform
+   * @param <OutputT> output {@link POutput} type of the transform
    */
-  public interface TransformProvider<InputT extends PInput, OutputT extends PValue> {
+  public interface TransformProvider<InputT extends PInput, OutputT extends POutput> {
 
     default InputT createInput(Pipeline p, Map<String, PCollection<?>> inputs) {
       if (inputs.size() == 0) {
