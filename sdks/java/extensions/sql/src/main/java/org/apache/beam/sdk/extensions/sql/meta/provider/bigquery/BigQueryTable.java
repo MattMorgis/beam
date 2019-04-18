@@ -20,25 +20,30 @@ package org.apache.beam.sdk.extensions.sql.meta.provider.bigquery;
 import java.io.Serializable;
 import org.apache.beam.sdk.annotations.Experimental;
 import org.apache.beam.sdk.extensions.sql.impl.schema.BaseBeamTable;
+import org.apache.beam.sdk.extensions.sql.meta.Table;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryUtils;
-import org.apache.beam.sdk.schemas.Schema;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryUtils.ConversionOptions;
+import org.apache.beam.sdk.schemas.SchemaCoder;
 import org.apache.beam.sdk.values.PBegin;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.POutput;
 import org.apache.beam.sdk.values.Row;
+import org.apache.beam.vendor.guava.v20_0.com.google.common.annotations.VisibleForTesting;
 
 /**
- * {@code BeamBigQueryTable} represent a BigQuery table as a target. This provider does not
- * currently support being a source.
+ * {@code BigQueryTable} represent a BigQuery table as a target. This provider does not currently
+ * support being a source.
  */
 @Experimental
-public class BeamBigQueryTable extends BaseBeamTable implements Serializable {
-  private String tableSpec;
+class BigQueryTable extends BaseBeamTable implements Serializable {
+  @VisibleForTesting final String bqLocation;
+  private final ConversionOptions conversionOptions;
 
-  public BeamBigQueryTable(Schema beamSchema, String tableSpec) {
-    super(beamSchema);
-    this.tableSpec = tableSpec;
+  BigQueryTable(Table table, BigQueryUtils.ConversionOptions options) {
+    super(table.getSchema());
+    this.conversionOptions = options;
+    this.bqLocation = table.getLocation();
   }
 
   @Override
@@ -48,9 +53,14 @@ public class BeamBigQueryTable extends BaseBeamTable implements Serializable {
 
   @Override
   public PCollection<Row> buildIOReader(PBegin begin) {
-    // TODO: make this more generic.
     return begin
-        .apply(BigQueryIO.read(BigQueryUtils.toBeamRow(schema)).from(tableSpec))
+        .apply(
+            "Read Input BQ Rows",
+            BigQueryIO.read(
+                    record ->
+                        BigQueryUtils.toBeamRow(record.getRecord(), getSchema(), conversionOptions))
+                .from(bqLocation)
+                .withCoder(SchemaCoder.of(getSchema())))
         .setRowSchema(getSchema());
   }
 
@@ -60,10 +70,6 @@ public class BeamBigQueryTable extends BaseBeamTable implements Serializable {
         BigQueryIO.<Row>write()
             .withSchema(BigQueryUtils.toTableSchema(getSchema()))
             .withFormatFunction(BigQueryUtils.toTableRow())
-            .to(tableSpec));
-  }
-
-  String getTableSpec() {
-    return tableSpec;
+            .to(bqLocation));
   }
 }

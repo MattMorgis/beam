@@ -15,24 +15,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.beam.sdk.coders;
+package org.apache.beam.runners.core.construction;
 
-import static org.junit.Assert.assertEquals;
+import org.apache.beam.model.pipeline.v1.Endpoints;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
-
-/** Tests for {@link FloatCoder}. */
-@RunWith(JUnit4.class)
-public class FloatCoderTest {
-
-  private static final Coder<Float> TEST_CODER = FloatCoder.of();
-
-  @Test
-  public void testStructuralValueReturnTheSameValue() {
-    Float expected = 23.45F;
-    Object actual = TEST_CODER.structuralValue(expected);
-    assertEquals(expected, actual);
-  }
+/**
+ * A factory for generating {@link ExpansionServiceClient} from {@link
+ * org.apache.beam.model.pipeline.v1.Endpoints.ApiServiceDescriptor}.
+ */
+interface ExpansionServiceClientFactory extends AutoCloseable {
+  ExpansionServiceClient getExpansionServiceClient(Endpoints.ApiServiceDescriptor endpoint);
 }
