@@ -19,6 +19,9 @@ from __future__ import absolute_import
 
 
 class ListRequest(object):
+  """
+  S3 request object for `List` command
+  """
 
   def __init__(self, bucket, prefix, continuation_token=None):
     self.bucket = bucket
@@ -51,6 +54,9 @@ class ListRequest(object):
 
 
 class ListResponse(object):
+  """
+  S3 response object for `List` command
+  """
 
   def __init__(self, items, next_token=None):
     self.items = items
@@ -74,6 +80,9 @@ class ListResponse(object):
 
 
 class Item(object):
+  """
+  An item in S3
+  """
 
   def __init__(self, etag, key, last_modified, size):
     self.etag = etag

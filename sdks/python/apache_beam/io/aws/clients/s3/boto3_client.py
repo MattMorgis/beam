@@ -27,6 +27,9 @@ except ImportError:
 
 
 class Client(object):
+  """
+  Wrapper for boto3 library
+  """
 
   def __init__(self):
     self.client = boto3.client('s3')
@@ -37,7 +40,7 @@ class Client(object):
     Args:
       request: (ListRequest) input message
     Returns:
-      (Objects) The response message.
+      (ListResponse) The response message.
     """
     kwargs = {'Bucket': request.bucket,
               'Prefix': request.prefix}
