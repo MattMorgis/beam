@@ -17,8 +17,11 @@
 """Tests for S3 client."""
 from __future__ import absolute_import
 
+import os
 import logging
 import unittest
+
+from apache_beam.io.aws.clients.s3 import fake_client
 
 # Protect against environments where boto3 library is not available.
 # pylint: disable=wrong-import-order, wrong-import-position
@@ -33,40 +36,39 @@ class TestS3IO(unittest.TestCase):
 
   def _insert_random_file(self, client, path, size):
     bucket, name = s3io.parse_s3_path(path)
-    f = FakeFile(bucket, name, os.urandom(size))
-    client.objects.add_file(f)
+    f = fake_client.FakeFile(bucket, name, os.urandom(size))
+    client.add_file(f)
     return f
 
   def setUp(self):
-    # self.client = FakeBotoClient()
-    self.aws = s3io.S3IO()
+    self.client = fake_client.FakeS3Client()
+    self.aws = s3io.S3IO(self.client)
 
   def test_list_prefix(self):
-    bucket_name = 'random-data-sets'
+    bucket_name = 's3-tests'
 
-    # TODO: Setup fake Boto client to return fake files
-    # objects = [
-    #     ('jerry/pigpen/phil', 5),
-    #     ('jerry/pigpen/bobby', 3),
-    #     ('jerry/billy/bobby', 4),
-    # ]
+    objects = [
+        ('jerry/pigpen/phil', 5),
+        ('jerry/pigpen/bobby', 3),
+        ('jerry/billy/bobby', 4),
+    ]
 
-    # for (object_name, size) in objects:
-    #   file_name = 's3://%s/%s' % (bucket_name, object_name)
-      # self._insert_random_file(self.client, file_name, size)
+    for (object_name, size) in objects:
+      file_name = 's3://%s/%s' % (bucket_name, object_name)
+      self._insert_random_file(self.client, file_name, size)
 
     test_cases = [
-        ('s3://random-data-sets/j', [
+        ('s3://s3-tests/j', [
             ('jerry/pigpen/phil', 5),
-            ('jerry/pigpen/bobby', 6),
-            ('jerry/billy/bobby', 6),
+            ('jerry/pigpen/bobby', 3),
+            ('jerry/billy/bobby', 4),
         ]),
-        ('s3://random-data-sets/jerry/', [
+        ('s3://s3-tests/jerry/', [
             ('jerry/pigpen/phil', 5),
-            ('jerry/pigpen/bobby', 6),
-            ('jerry/billy/bobby', 6),
+            ('jerry/pigpen/bobby', 3),
+            ('jerry/billy/bobby', 4),
         ]),
-        ('s3://random-data-sets/jerry/pigpen/phil', [
+        ('s3://s3-tests/jerry/pigpen/phil', [
             ('jerry/pigpen/phil', 5),
         ]),
     ]
