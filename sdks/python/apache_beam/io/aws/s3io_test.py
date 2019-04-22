@@ -44,6 +44,13 @@ class TestS3IO(unittest.TestCase):
     self.client = fake_client.FakeS3Client()
     self.aws = s3io.S3IO(self.client)
 
+  def test_file_mode(self):
+    file_name = 's3://s3io-test/dummy_mode_file'
+    with self.aws.open(file_name, 'w') as f:
+      assert f.mode == 'w'
+    with self.aws.open(file_name, 'r') as f:
+      assert f.mode == 'r'
+
   def test_list_prefix(self):
     bucket_name = 's3-tests'
 
