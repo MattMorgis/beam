@@ -43,12 +43,10 @@ class FakeFile(object):
 class FakeS3Client(object):
   def __init__(self):
     self.files = {}
-    self.last_generation = {}
     self.list_continuation_tokens = {}
 
   def add_file(self, f):
     self.files[(f.bucket, f.key)] = f
-    self.last_generation[(f.bucket, f.key)] = f.etag
 
   def list(self, request):
     bucket = request.bucket
