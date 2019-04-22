@@ -26,7 +26,7 @@ class FakeFile(object):
     self.key = key
     self.size = size
     self.last_modified = last_modified
-    self.etag = 1
+    self.etag = 'xxxxxxxx'
 
   def get_metadata(self):
     last_modified_datetime = None
