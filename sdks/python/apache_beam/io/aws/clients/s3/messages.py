@@ -18,6 +18,32 @@
 from __future__ import absolute_import
 
 
+class GetRequest(object):
+  """
+  S3 request object for `Get` command
+  """
+
+  def __init__(self, bucket, object):
+    self.bucket = bucket
+    self.object = object
+
+  @property
+  def bucket(self):
+    return self._bucket
+
+  @bucket.setter
+  def bucket(self, bucket):
+    self._bucket = bucket
+
+  @property
+  def object(self):
+    return self._object
+
+  @object.setter
+  def object(self, object):
+    self._object = object
+
+
 class ListRequest(object):
   """
   S3 request object for `List` command
@@ -121,3 +147,8 @@ class Item(object):
   @size.setter
   def size(self, size):
     self._size = size
+
+
+class S3ClientError(Exception):
+  message = None
+  code = None
