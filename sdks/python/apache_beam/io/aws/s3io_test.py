@@ -32,6 +32,40 @@ except ImportError:
 # pylint: enable=wrong-import-order, wrong-import-position
 
 
+class TestS3PathParser(unittest.TestCase):
+
+  BAD_S3_PATHS = [
+      's3://',
+      's3://bucket',
+      's3:///name',
+      's3:///',
+      's3:/blah/bucket/name',
+  ]
+
+  def test_s3_path(self):
+    self.assertEqual(
+        s3io.parse_s3_path('s3://bucket/name'), ('bucket', 'name'))
+    self.assertEqual(
+        s3io.parse_s3_path('s3://bucket/name/sub'), ('bucket', 'name/sub'))
+
+  def test_bad_s3_path(self):
+    for path in self.BAD_S3_PATHS:
+      self.assertRaises(ValueError, s3io.parse_s3_path, path)
+    self.assertRaises(ValueError, s3io.parse_s3_path, 's3://bucket/')
+
+  def test_s3_path_object_optional(self):
+    self.assertEqual(
+        s3io.parse_s3_path('s3://bucket/name', object_optional=True),
+        ('bucket', 'name'))
+    self.assertEqual(
+        s3io.parse_s3_path('s3://bucket/', object_optional=True),
+        ('bucket', ''))
+
+  def test_bad_s3_path_object_optional(self):
+    for path in self.BAD_S3_PATHS:
+      self.assertRaises(ValueError, s3io.parse_s3_path, path, True)
+
+
 class TestS3IO(unittest.TestCase):
 
   def _insert_random_file(self, client, path, size):
