@@ -24,10 +24,13 @@ import logging
 import io
 import re
 import time
+import traceback
 from builtins import object
 
 from apache_beam.io.filesystemio import Downloader
 from apache_beam.io.filesystemio import DownloaderStream
+from apache_beam.io.filesystemio import Uploader
+from apache_beam.io.filesystemio import UploaderStream
 from apache_beam.utils import retry
 
 try:
@@ -88,7 +91,7 @@ class S3IO(object):
       return io.BufferedReader(DownloaderStream(downloader, mode=mode),
                                buffer_size=read_buffer_size)
     elif mode == 'w' or mode == 'wb':
-      uploader = GcsUploader(self.client, filename, mime_type)
+      uploader = S3Uploader(self.client, filename, None)
       return io.BufferedWriter(UploaderStream(uploader, mode=mode),
                                buffer_size=128 * 1024)
     else:
@@ -169,3 +172,66 @@ class S3Downloader(Downloader):
 
   def get_range(self, start, end):
     return self._client.get_range(self._get_request, start, end)
+
+
+class S3Uploader(Uploader):
+  def __init__(self, client, path, mime_type):
+    self._client = client
+    self._path = path
+    self._bucket, self._name = parse_s3_path(path)
+    #self._mime_type = mime_type
+
+    self.part_number = 1
+    self.last_error = None
+
+    self.upload_id = None
+
+    self.parts =  []
+
+    self._start_upload()
+
+  # There is retry logic in the underlying transfer library but we should make
+  # it more explicit so we can control the retry parameters.
+  @retry.no_retries  # Using no_retries marks this as an integration point.
+  def _start_upload(self):
+    # The uploader by default transfers data in chunks of 1024 * 1024 bytes at
+    # a time, buffering writes until that size is reached.
+    try:
+      request = messages.UploadRequest(self._bucket, self._name, None)
+      response = self._client.create_multipart_upload(request)
+      self.upload_id = response['UploadId']
+    except Exception as e:  # pylint: disable=broad-except
+      logging.error('Error in _start_upload while inserting file %s: %s',
+                    self._path, traceback.format_exc())
+      self.last_error = e
+
+  def put(self, data):
+    try:
+      request = messages.UploadPartRequest(self._bucket,
+                                           self._name,
+                                           self.upload_id,
+                                           self.part_number,
+                                           data.tobytes())
+      response = self._client.upload_part(request)
+      self.parts.append({'ETag': response.etag,
+                         'PartNumber': response.part_number})
+      self.part_number = self.part_number + 1
+    except messages.S3ClientError as e:
+      self.last_error = e
+      if e.code == 404:
+        raise IOError(errno.ENOENT, 'Not found: %s' % self._path)
+      else:
+        logging.error('HTTP error while requesting file %s: %s', self._path,
+                      3)
+        raise
+
+  def finish(self):
+    if self.last_error is not None:
+      raise self.last_error  # pylint: disable=raising-bad-type
+
+    request = messages.UploadPartRequest(self._bucket,
+                                         self._name,
+                                         self.upload_id,
+                                         self.parts,
+                                         None)
+    self._client.complete_multipart_upload(request)
