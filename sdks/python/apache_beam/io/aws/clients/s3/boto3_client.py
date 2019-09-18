@@ -127,3 +127,43 @@ class Client(object):
 
     response = messages.ListResponse(items, next_token)
     return response
+
+  def create_multipart_upload(self, request):
+    r"""Retrieves a list of objects matching the criteria.
+
+    Args:
+      request: (UploadRequest) input message
+    Returns:
+      (UploadResponse) The response message.
+    """
+    response = self.client.create_multipart_upload(Bucket=request.bucket,
+                                                   Key=request.object)
+    return response
+
+  def upload_part(self, request):
+    try:
+      response = self.client.upload_part(Body=request.bytes,
+                                         Bucket=request.bucket,
+                                         Key=request.object,
+                                         PartNumber=request.part_number,
+                                         UploadId=request.upload_id)
+      respnose_message = messages.UploadPartResponse(response['ETag'],
+                                                     request.part_number)
+      return respnose_message
+    except ClientError as e:
+      s3error = messages.S3ClientError(e.message)
+      s3error.code = int(e.response['Error']['Code'])
+      s3error.message = e.response['Error']['Message']
+      raise s3error
+    except NoCredentialsError as e:
+      s3error = messages.S3ClientError(e.message)
+      s3error.code = 400
+      s3error.message = e.message
+      raise s3error
+
+  def complete_multipart_upload(self, request):
+    parts = {'Parts': request.part_number}
+    return self.client.complete_multipart_upload(Bucket=request.bucket,
+                                                 Key=request.object,
+                                                 UploadId=request.upload_id,
+                                                 MultipartUpload=parts)

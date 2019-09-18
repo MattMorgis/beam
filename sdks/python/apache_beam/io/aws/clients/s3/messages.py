@@ -44,6 +44,121 @@ class GetRequest(object):
     self._object = object
 
 
+class UploadPartResponse(object):
+  """
+  S3 response object for `UploadPart` command
+  """
+
+  def __init__(self, etag, part_number):
+    self.etag = etag
+    self.part_number = part_number
+
+  @property
+  def etag(self):
+    return self._etag
+
+  @etag.setter
+  def etag(self, etag):
+    self._etag = etag
+
+  @property
+  def part_number(self):
+    return self._part_number
+
+  @part_number.setter
+  def part_number(self, part_number):
+    self._part_number = part_number
+
+
+class UploadRequest(object):
+  """
+  S3 request object for `StartUpload` command
+  """
+
+  def __init__(self, bucket, object, mime_type):
+    self.bucket = bucket
+    self.object = object
+    self.mime_type = mime_type
+
+  @property
+  def bucket(self):
+    return self._bucket
+
+  @bucket.setter
+  def bucket(self, bucket):
+    self._bucket = bucket
+
+  @property
+  def object(self):
+    return self._object
+
+  @object.setter
+  def object(self, object):
+    self._object = object
+
+  @property
+  def mime_type(self):
+    return self._mime_type
+
+  @mime_type.setter
+  def mime_type(self, mime_type):
+    self._mime_type = mime_type
+
+
+class UploadPartRequest(object):
+  """
+  S3 request object for `UploadPart` command
+  """
+
+  def __init__(self, bucket, object, upload_id, part_number, bytes):
+    self.bucket = bucket
+    self.object = object
+    self.upload_id = upload_id
+    self.part_number = part_number
+    self.bytes = bytes
+    # self.mime_type = mime_type
+
+  @property
+  def bucket(self):
+    return self._bucket
+
+  @bucket.setter
+  def bucket(self, bucket):
+    self._bucket = bucket
+
+  @property
+  def object(self):
+    return self._object
+
+  @object.setter
+  def object(self, object):
+    self._object = object
+
+  @property
+  def upload_id(self):
+    return self._upload_id
+
+  @upload_id.setter
+  def upload_id(self, upload_id):
+    self._upload_id = upload_id
+
+  @property
+  def part_number(self):
+    return self._part_number
+
+  @part_number.setter
+  def part_number(self, part_number):
+    self._part_number = part_number
+
+  @property
+  def bytes(self):
+    return self._bytes
+
+  @bytes.setter
+  def bytes(self, bytes):
+    self._bytes = bytes
+
+
 class ListRequest(object):
   """
   S3 request object for `List` command
