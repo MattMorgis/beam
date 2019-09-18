@@ -51,9 +51,9 @@ import org.apache.beam.sdk.function.ThrowingConsumer;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.util.WindowedValue;
-import org.apache.beam.vendor.grpc.v1p13p1.com.google.protobuf.Message;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.util.concurrent.Uninterruptibles;
+import org.apache.beam.vendor.grpc.v1p21p0.com.google.protobuf.Message;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.util.concurrent.Uninterruptibles;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -69,8 +69,8 @@ import org.mockito.MockitoAnnotations;
 /** Tests for {@link ProcessBundleHandler}. */
 @RunWith(JUnit4.class)
 public class ProcessBundleHandlerTest {
-  private static final String DATA_INPUT_URN = "urn:org.apache.beam:source:runner:0.1";
-  private static final String DATA_OUTPUT_URN = "urn:org.apache.beam:sink:runner:0.1";
+  private static final String DATA_INPUT_URN = "beam:source:runner:0.1";
+  private static final String DATA_OUTPUT_URN = "beam:sink:runner:0.1";
 
   @Rule public ExpectedException thrown = ExpectedException.none();
 

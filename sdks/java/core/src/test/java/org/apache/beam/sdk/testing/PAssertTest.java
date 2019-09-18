@@ -21,6 +21,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -56,8 +57,8 @@ import org.apache.beam.sdk.util.common.ElementByteSizeObserver;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.TimestampedValue;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Throwables;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterables;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Throwables;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterables;
 import org.joda.time.Duration;
 import org.joda.time.Instant;
 import org.junit.Rule;
@@ -511,7 +512,7 @@ public class PAssertTest implements Serializable {
             new MatcherCheckerFn(SerializableMatchers.contains(11)));
 
     String stacktrace = Throwables.getStackTraceAsString(res.assertionError());
-    assertEquals(false, res.isSuccess());
+    assertFalse(res.isSuccess());
     assertThat(stacktrace, containsString("PAssertionSite.capture"));
   }
 

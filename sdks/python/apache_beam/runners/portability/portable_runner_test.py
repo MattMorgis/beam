@@ -32,6 +32,8 @@ import unittest
 import grpc
 
 import apache_beam as beam
+from apache_beam.options.pipeline_options import DebugOptions
+from apache_beam.options.pipeline_options import DirectOptions
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.options.pipeline_options import PortableOptions
 from apache_beam.portability import common_urns
@@ -43,6 +45,7 @@ from apache_beam.runners.portability import fn_api_runner_test
 from apache_beam.runners.portability import portable_runner
 from apache_beam.runners.portability.local_job_service import LocalJobServicer
 from apache_beam.runners.portability.portable_runner import PortableRunner
+from apache_beam.runners.worker import worker_pool_main
 from apache_beam.runners.worker.channel_factory import GRPCChannelFactory
 
 
@@ -184,12 +187,21 @@ class PortableRunnerTest(fn_api_runner_test.FnApiRunnerTest):
   # Inherits all tests from fn_api_runner_test.FnApiRunnerTest
 
 
+@unittest.skip("BEAM-7248")
+class PortableRunnerOptimized(PortableRunnerTest):
+
+  def create_options(self):
+    options = super(PortableRunnerOptimized, self).create_options()
+    options.view_as(DebugOptions).add_experiment('pre_optimize=all')
+    return options
+
+
 class PortableRunnerTestWithExternalEnv(PortableRunnerTest):
 
   @classmethod
   def setUpClass(cls):
     cls._worker_address, cls._worker_server = (
-        portable_runner.BeamFnExternalWorkerPoolServicer.start())
+        worker_pool_main.BeamFnExternalWorkerPoolServicer.start())
 
   @classmethod
   def tearDownClass(cls):
@@ -202,7 +214,6 @@ class PortableRunnerTestWithExternalEnv(PortableRunnerTest):
     return options
 
 
-@unittest.skip("BEAM-3040")
 class PortableRunnerTestWithSubprocesses(PortableRunnerTest):
   _use_subprocesses = True
 
@@ -212,7 +223,7 @@ class PortableRunnerTestWithSubprocesses(PortableRunnerTest):
         python_urns.SUBPROCESS_SDK)
     options.view_as(PortableOptions).environment_config = (
         b'%s -m apache_beam.runners.worker.sdk_worker_main' %
-        sys.executable.encode('ascii'))
+        sys.executable.encode('ascii')).decode('utf-8')
     return options
 
   @classmethod
@@ -222,6 +233,17 @@ class PortableRunnerTestWithSubprocesses(PortableRunnerTest):
         '-m', 'apache_beam.runners.portability.local_job_service_main',
         '-p', str(job_port),
     ]
+
+
+class PortableRunnerTestWithSubprocessesAndMultiWorkers(
+    PortableRunnerTestWithSubprocesses):
+  _use_subprocesses = True
+
+  def create_options(self):
+    options = super(PortableRunnerTestWithSubprocessesAndMultiWorkers, self) \
+      .create_options()
+    options.view_as(DirectOptions).direct_num_workers = 2
+    return options
 
 
 class PortableRunnerInternalTest(unittest.TestCase):
@@ -271,6 +293,25 @@ class PortableRunnerInternalTest(unittest.TestCase):
             payload=beam_runner_api_pb2.ProcessPayload(
                 command='run.sh',
             ).SerializeToString()))
+
+
+def hasDockerImage():
+  image = PortableRunner.default_docker_image()
+  try:
+    check_image = subprocess.check_output("docker images -q %s" % image,
+                                          shell=True)
+    return check_image != ''
+  except Exception:
+    return False
+
+
+@unittest.skipIf(not hasDockerImage(), "docker not installed or "
+                                       "no docker image")
+class PortableRunnerTestWithLocalDocker(PortableRunnerTest):
+  def create_options(self):
+    options = super(PortableRunnerTestWithLocalDocker, self).create_options()
+    options.view_as(PortableOptions).job_endpoint = 'embed'
+    return options
 
 
 if __name__ == '__main__':

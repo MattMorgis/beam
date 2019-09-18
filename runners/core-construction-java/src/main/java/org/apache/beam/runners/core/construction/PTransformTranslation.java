@@ -18,7 +18,7 @@
 package org.apache.beam.runners.core.construction;
 
 import static org.apache.beam.runners.core.construction.BeamUrns.getUrn;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkArgument;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -47,11 +47,11 @@ import org.apache.beam.sdk.values.PInput;
 import org.apache.beam.sdk.values.POutput;
 import org.apache.beam.sdk.values.PValue;
 import org.apache.beam.sdk.values.TupleTag;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Joiner;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableSortedSet;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterables;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Sets;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Joiner;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableSortedSet;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterables;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Sets;
 
 /**
  * Utilities for converting {@link PTransform PTransforms} to {@link RunnerApi Runner API protocol
@@ -111,6 +111,10 @@ public class PTransformTranslation {
       getUrn(SplittableParDoComponents.PROCESS_KEYED_ELEMENTS);
   public static final String SPLITTABLE_PROCESS_ELEMENTS_URN =
       getUrn(SplittableParDoComponents.PROCESS_ELEMENTS);
+  public static final String SPLITTABLE_SPLIT_AND_SIZE_RESTRICTIONS_URN =
+      getUrn(SplittableParDoComponents.SPLIT_AND_SIZE_RESTRICTIONS);
+  public static final String SPLITTABLE_PROCESS_SIZED_ELEMENTS_AND_RESTRICTIONS_URN =
+      getUrn(SplittableParDoComponents.PROCESS_SIZED_ELEMENTS_AND_RESTRICTIONS);
 
   public static final String ITERABLE_SIDE_INPUT =
       getUrn(RunnerApi.StandardSideInputTypes.Enum.ITERABLE);

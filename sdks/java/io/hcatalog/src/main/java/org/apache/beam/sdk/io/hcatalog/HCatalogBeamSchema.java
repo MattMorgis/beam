@@ -22,8 +22,8 @@ import java.util.List;
 import java.util.Map;
 import org.apache.beam.sdk.annotations.Experimental;
 import org.apache.beam.sdk.schemas.Schema;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Optional;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Lists;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Optional;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Lists;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
@@ -41,7 +41,7 @@ import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 @Experimental
 public class HCatalogBeamSchema {
 
-  private @Nullable IMetaStoreClient metastore;
+  private @Nullable final IMetaStoreClient metastore;
 
   private HCatalogBeamSchema(IMetaStoreClient metastore) {
     this.metastore = metastore;

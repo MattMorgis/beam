@@ -188,13 +188,17 @@ a command-line argument.
 
 You can add your own custom options in addition to the standard
 `PipelineOptions`. To add your own options, define an interface with getter and
-setter methods for each option, as in the following example:
+setter methods for each option, as in the following example for
+adding `input` and `output` custom options:
 
 ```java
 public interface MyOptions extends PipelineOptions {
-    String getMyCustomOption();
-    void setMyCustomOption(String myCustomOption);
-  }
+    String getInput();
+    void setInput(String input);
+    
+    String getOutput();
+    void setOutput(String output);
+}
 ```
 ```py
 {% github_sample /apache/beam/blob/master/sdks/python/apache_beam/examples/snippets/snippets.py tag:pipeline_options_define_custom
@@ -214,11 +218,16 @@ You set the description and default value using annotations, as follows:
 
 ```java
 public interface MyOptions extends PipelineOptions {
-    @Description("My custom command line argument.")
-    @Default.String("DEFAULT")
-    String getMyCustomOption();
-    void setMyCustomOption(String myCustomOption);
-  }
+    @Description("Input for the pipeline")
+    @Default.String("gs://my-bucket/input")
+    String getInput();
+    void setInput(String input);
+
+    @Description("Output for the pipeline")
+    @Default.String("gs://my-bucket/input")
+    String getOutput();
+    void setOutput(String output);
+}
 ```
 ```py
 {% github_sample /apache/beam/blob/master/sdks/python/apache_beam/examples/snippets/snippets.py tag:pipeline_options_define_custom_with_help_and_default
@@ -226,8 +235,8 @@ public interface MyOptions extends PipelineOptions {
 ```
 ```go
 var (
-  input = flag.String("input", "gs://my-bucket/input", "File(s) to read.")
-  output = flag.String("output", "gs://my-bucket/output", "Output file.")
+  input = flag.String("input", "gs://my-bucket/input", "Input for the pipeline")
+  output = flag.String("output", "gs://my-bucket/output", "Output for the pipeline")
 )
 ```
 
@@ -251,7 +260,7 @@ MyOptions options = PipelineOptionsFactory.fromArgs(args)
                                                 .as(MyOptions.class);
 ```
 
-Now your pipeline can accept `--myCustomOption=value` as a command-line argument.
+Now your pipeline can accept `--input=value` and `--output=value` as command-line arguments.
 
 ## 3. PCollections {#pcollections}
 
@@ -302,7 +311,7 @@ public static void main(String[] args) {
 
     // Create the PCollection 'lines' by applying a 'Read' transform.
     PCollection<String> lines = p.apply(
-      "ReadMyFile", TextIO.read().from("protocol://path/to/some/inputData.txt"));
+      "ReadMyFile", TextIO.read().from("gs://some/inputData.txt"));
 }
 ```
 ```py
@@ -310,7 +319,7 @@ public static void main(String[] args) {
 %}
 ```
 ```go
-lines := textio.Read(s, "protocol://path/to/some/inputData.txt")
+lines := textio.Read(s, "gs://some/inputData.txt")
 ```
 
 See the [section on I/O](#pipeline-io) to learn more about how to read from the
@@ -514,12 +523,14 @@ that you can apply multiple transforms to the same input `PCollection` to create
 a branching pipeline, like so:
 
 ```java
-[Output PCollection 1] = [Input PCollection].apply([Transform 1])
-[Output PCollection 2] = [Input PCollection].apply([Transform 2])
+[PCollection of database table rows] = [Database Table Reader].apply([Read Transform])
+[PCollection of 'A' names] = [PCollection of database table rows].apply([Transform A])
+[PCollection of 'B' names] = [PCollection of database table rows].apply([Transform B])
 ```
 ```py
-[Output PCollection 1] = [Input PCollection] | [Transform 1]
-[Output PCollection 2] = [Input PCollection] | [Transform 2]
+[PCollection of database table rows] = [Database Table Reader] | [Read Transform]
+[PCollection of 'A' names] = [PCollection of database table rows] | [Transform A]
+[PCollection of 'B' names] = [PCollection of database table rows] | [Transform B]
 ```
 
 The resulting workflow graph from the branching pipeline above looks like this.
@@ -1079,12 +1090,6 @@ pc = ...
 {% github_sample /apache/beam/blob/master/sdks/python/apache_beam/examples/snippets/snippets_test.py tag:combine_custom_average_define
 %}```
 
-If you are combining a `PCollection` of key-value pairs, [per-key
-combining](#combining-values-in-a-keyed-pcollection) is often enough. If
-you need the combining strategy to change based on the key (for example, MIN for
-some users and MAX for other users), you can define a `KeyedCombineFn` to access
-the key within the combining strategy.
-
 ##### 4.2.4.3. Combining a PCollection into a single value {#combining-pcollection}
 
 Use the global combine to transform all of the elements in a given `PCollection`
@@ -1360,7 +1365,7 @@ In addition to the main input `PCollection`, you can provide additional inputs
 to a `ParDo` transform in the form of side inputs. A side input is an additional
 input that your `DoFn` can access each time it processes an element in the input
 `PCollection`. When you specify a side input, you create a view of some other
-data that can be read from within the `ParDo` transform's `DoFn` while procesing
+data that can be read from within the `ParDo` transform's `DoFn` while processing
 each element.
 
 Side inputs are useful if your `ParDo` needs to inject additional data when
@@ -1560,16 +1565,23 @@ together.
 {% github_sample /apache/beam/blob/master/sdks/python/apache_beam/examples/snippets/snippets_test.py tag:model_pardo_with_undeclared_outputs
 %}```
 
-{:.language-java}
 #### 4.5.3. Accessing additional parameters in your DoFn {#other-dofn-parameters}
 
 {:.language-java}
 In addition to the element and the `OutputReceiver`, Beam will populate other parameters to your DoFn's `@ProcessElement` method.
 Any combination of these parameters can be added to your process method in any order.
 
+{:.language-py}
+In addition to the element, Beam will populate other parameters to your DoFn's `process` method.
+Any combination of these parameters can be added to your process method in any order.
+
 {:.language-java}
 **Timestamp:**
 To access the timestamp of an input element, add a parameter annotated with `@Timestamp` of type `Instant`. For example:
+
+{:.language-py}
+**Timestamp:**
+To access the timestamp of an input element, add a keyword parameter default to `DoFn.TimestampParam`. For example:
 
 ```java
 .of(new DoFn<String, String>() {
@@ -1577,6 +1589,16 @@ To access the timestamp of an input element, add a parameter annotated with `@Ti
   }})
 ```
 
+```py
+import apache_beam as beam
+
+class ProcessRecord(beam.DoFn):
+
+  def process(self, element, timestamp=beam.DoFn.TimestampParam):
+     # access timestamp of element.
+     pass  
+  
+```
 
 {:.language-java}
 **Window:**
@@ -1586,10 +1608,27 @@ will be raised. If an element falls in multiple windows (for example, this will 
 `@ProcessElement` method will be invoked multiple time for the element, once for each window. For example, when fixed windows
 are being used, the window is of type `IntervalWindow`.
 
+{:.language-py}
+**Window:**
+To access the window an input element falls into, add a keyword parameter default to `DoFn.WindowParam`.
+If an element falls in multiple windows (for example, this will happen when using `SlidingWindows`), then the
+`process` method will be invoked multiple time for the element, once for each window. 
+
 ```java
 .of(new DoFn<String, String>() {
      public void processElement(@Element String word, IntervalWindow window) {
   }})
+```
+
+```py
+import apache_beam as beam
+
+class ProcessRecord(beam.DoFn):
+
+  def process(self, element, window=beam.DoFn.WindowParam):
+     # access window e.g window.end.micros
+     pass  
+  
 ```
 
 {:.language-java}
@@ -1597,10 +1636,27 @@ are being used, the window is of type `IntervalWindow`.
 When triggers are used, Beam provides a `PaneInfo` object that contains information about the current firing. Using `PaneInfo`
 you can determine whether this is an early or a late firing, and how many times this window has already fired for this key.
 
+{:.language-py}
+**PaneInfo:**
+When triggers are used, Beam provides a `DoFn.PaneInfoParam` object that contains information about the current firing. Using `DoFn.PaneInfoParam`
+you can determine whether this is an early or a late firing, and how many times this window has already fired for this key. 
+This feature implementation in python sdk is not fully completed, see more at [BEAM-3759](https://issues.apache.org/jira/browse/BEAM-3759).
+
 ```java
 .of(new DoFn<String, String>() {
      public void processElement(@Element String word, PaneInfo paneInfo) {
   }})
+```
+
+```py
+import apache_beam as beam
+
+class ProcessRecord(beam.DoFn):
+
+  def process(self, element, pane_info=beam.DoFn.PaneInfoParam):
+     # access pane info e.g pane_info.is_first, pane_info.is_last, pane_info.timing
+     pass  
+  
 ```
 
 {:.language-java}
@@ -1613,12 +1669,75 @@ The `PipelineOptions` for the current pipeline can always be accessed in a proce
 ```
 
 {:.language-java}
-`@OnTimer` methods can also access many of these parameters. Timestamp, window, `PipelineOptions`, `OutputReceiver`, and
+`@OnTimer` methods can also access many of these parameters. Timestamp, Window, key, `PipelineOptions`, `OutputReceiver`, and
 `MultiOutputReceiver` parameters can all be accessed in an `@OnTimer` method. In addition, an `@OnTimer` method can take
 a parameter of type `TimeDomain` which tells whether the timer is based on event time or processing time.
 Timers are explained in more detail in the
 [Timely (and Stateful) Processing with Apache Beam]({{ site.baseurl }}/blog/2017/08/28/timely-processing.html) blog post.
 
+{:.language-py}
+**Timer and State:**
+In addition to aforementioned parameters, user defined Timer and State parameters can be used in a Stateful DoFn.
+Timers and States are explained in more detail in the
+[Timely (and Stateful) Processing with Apache Beam]({{ site.baseurl }}/blog/2017/08/28/timely-processing.html) blog post.
+
+```py
+
+class StatefulDoFn(beam.DoFn):
+  """An example stateful DoFn with state and timer"""
+
+  BUFFER_STATE_1 = BagStateSpec('buffer1', beam.BytesCoder())
+  BUFFER_STATE_2 = BagStateSpec('buffer2', beam.VarIntCoder())
+  WATERMARK_TIMER = TimerSpec('watermark_timer', TimeDomain.WATERMARK)
+
+  def process(self,
+              element,
+              timestamp=beam.DoFn.TimestampParam,
+              window=beam.DoFn.WindowParam,
+              buffer_1=beam.DoFn.StateParam(BUFFER_STATE_1),
+              buffer_2=beam.DoFn.StateParam(BUFFER_STATE_2),
+              watermark_timer=beam.DoFn.TimerParam(WATERMARK_TIMER)):
+
+    # Do you processing here
+    key, value = element
+    # Read all the data from buffer1
+    all_values_in_buffer_1 = [x for x in buffer_1.read()]
+
+    if StatefulDoFn._is_clear_buffer_1_required(all_values_in_buffer_1):
+        # clear the buffer data if required conditions are met.
+        buffer_1.clear()
+
+    # add the value to buffer 2
+    buffer_2.add(value)
+
+    if StatefulDoFn._all_condition_met():
+      # Clear the timer if certain condition met and you don't want to trigger
+      # the callback method.
+      watermark_timer.clear()
+
+    yield element
+
+  @on_timer(WATERMARK_TIMER)
+  def on_expiry_1(self,
+                  timestamp=beam.DoFn.TimestampParam,
+                  window=beam.DoFn.WindowParam,
+                  key=beam.DoFn.KeyParam,
+                  buffer_1=beam.DoFn.StateParam(BUFFER_STATE_1),
+                  buffer_2=beam.DoFn.StateParam(BUFFER_STATE_2)):
+    # Window and key parameters are really useful especially for debugging issues.
+    yield 'expired1'
+
+  @staticmethod
+  def _all_condition_met():
+      # some logic
+      return True
+
+  @staticmethod
+  def _is_clear_buffer_1_required(buffer_1_data):
+      # Some business logic
+      return True
+
+```
 ### 4.6. Composite transforms {#composite-transforms}
 
 Transforms can have a nested structure, where a complex transform performs
@@ -2436,7 +2555,7 @@ Note: For simplicity, we've assumed that we're using a very straightforward
 watermark that estimates the lag time. In practice, your `PCollection`'s data
 source determines the watermark, and watermarks can be more precise or complex.
 
-Beam's default windowing configuration tries to determines when all data has
+Beam's default windowing configuration tries to determine when all data has
 arrived (based on the type of data source) and then advances the watermark past
 the end of the window. This default configuration does _not_ allow late data.
 [Triggers](#triggers) allow you to modify and refine the windowing strategy for
@@ -2837,3 +2956,143 @@ elements, or after a minute.
 ```py
 {% github_sample /apache/beam/blob/master/sdks/python/apache_beam/examples/snippets/snippets_test.py tag:model_other_composite_triggers
 %}```
+
+## 9. Metrics {#metrics}
+In the Beam model, metrics provide some insight into the current state of a user pipeline, 
+potentially while the pipeline is running. There could be different reasons for that, for instance:
+*   Check the number of errors encountered while running a specific step in the pipeline;
+*   Monitor the number of RPCs made to backend service;
+*   Retrieve an accurate count of the number of elements that have been processed;
+*   ...and so on.
+
+### 9.1 The main concepts of Beam metrics
+*   **Named**. Each metric has a name which consists of a namespace and an actual name. The 
+    namespace can be used to differentiate between multiple metrics with the same name and also 
+    allows querying for all metrics within a specific namespace. 
+*   **Scoped**. Each metric is reported against a specific step in the pipeline, indicating what 
+    code was running when the metric was incremented.
+*   **Dynamically Created**. Metrics may be created during runtime without pre-declaring them, in 
+    much the same way a logger could be created. This makes it easier to produce metrics in utility 
+    code and have them usefully reported. 
+*   **Degrade Gracefully**. If a runner doesn’t support some part of reporting metrics, the 
+    fallback behavior is to drop the metric updates rather than failing the pipeline. If a runner 
+    doesn’t support some part of querying metrics, the runner will not return the associated data.
+
+Reported metrics are implicitly scoped to the transform within the pipeline that reported them. 
+This allows reporting the same metric name in multiple places and identifying the value each 
+transform reported, as well as aggregating the metric across the entire pipeline.
+
+> **Note:** It is runner-dependent whether metrics are accessible during pipeline execution or only 
+after jobs have completed.
+
+### 9.2 Types of metrics {#types-of-metrics}
+There are three types of metrics that are supported for the moment: `Counter`, `Distribution` and 
+`Gauge`.
+
+**Counter**: A metric that reports a single long value and can be incremented or decremented.
+
+```java
+Counter counter = Metrics.counter( "namespace", "counter1");
+
+@ProcessElement
+public void processElement(ProcessContext context) {
+  // count the elements
+  counter.inc();
+  ...
+}
+```
+
+**Distribution**: A metric that reports information about the distribution of reported values.
+
+```java
+Distribution distribution = Metrics.distribution( "namespace", "distribution1");
+
+@ProcessElement
+public void processElement(ProcessContext context) {
+  Integer element = context.element();
+    // create a distribution (histogram) of the values 
+    distribution.update(element);
+    ...
+}
+```
+
+**Gauge**: A metric that reports the latest value out of reported values. Since metrics are 
+collected from many workers the value may not be the absolute last, but one of the latest values.
+
+```java
+Gauge gauge = Metrics.gauge( "namespace", "gauge1");
+
+@ProcessElement
+public void processElement(ProcessContext context) {
+  Integer element = context.element();
+  // create a gauge (latest value received) of the values 
+  gauge.set(element);
+  ...
+}
+```
+
+### 9.3 Querying metrics {#querying-metrics}
+`PipelineResult` has a method `metrics()` which returns a `MetricResults` object that allows 
+accessing metrics. The main method available in `MetricResults` allows querying for all metrics 
+matching a given filter.
+
+```java
+public interface PipelineResult {
+  MetricResults metrics();
+}
+
+public abstract class MetricResults {
+  public abstract MetricQueryResults queryMetrics(@Nullable MetricsFilter filter);
+}
+
+public interface MetricQueryResults {
+  Iterable<MetricResult<Long>> getCounters();
+  Iterable<MetricResult<DistributionResult>> getDistributions();
+  Iterable<MetricResult<GaugeResult>> getGauges();
+}
+
+public interface MetricResult<T> {
+  MetricName getName();
+  String getStep();
+  T getCommitted();
+  T getAttempted();
+}
+```
+
+### 9.4 Using metrics in pipeline {#using-metrics}
+Below, there is a simple example of how to use a `Counter` metric in a user pipeline.
+
+```java
+// creating a pipeline with custom metrics DoFn
+pipeline
+    .apply(...)
+    .apply(ParDo.of(new MyMetricsDoFn()));
+
+pipelineResult = pipeline.run().waitUntilFinish(...);
+
+// request the metric called "counter1" in namespace called "namespace"
+MetricQueryResults metrics =
+    pipelineResult
+        .metrics()
+        .queryMetrics(
+            MetricsFilter.builder()
+                .addNameFilter(MetricNameFilter.named("namespace", "counter1"))
+                .build());
+
+// print the metric value - there should be only one line because there is only one metric 
+// called "counter1" in the namespace called "namespace"
+for (MetricResult<Long> counter: metrics.getCounters()) {
+  System.out.println(counter.getName() + ":" + counter.getAttempted());
+}
+
+public class MyMetricsDoFn extends DoFn<Integer, Integer> {
+  private final Counter counter = Metrics.counter( "namespace", "counter1");
+
+  @ProcessElement
+  public void processElement(ProcessContext context) {
+    // count the elements
+    counter.inc();
+    context.output(context.element());
+  }
+}
+```

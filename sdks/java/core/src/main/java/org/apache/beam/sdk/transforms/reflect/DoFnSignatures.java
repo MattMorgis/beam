@@ -17,7 +17,7 @@
  */
 package org.apache.beam.sdk.transforms.reflect;
 
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkState;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkState;
 
 import com.google.auto.value.AutoValue;
 import java.lang.annotation.Annotation;
@@ -49,11 +49,13 @@ import org.apache.beam.sdk.state.TimerSpec;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.DoFn.MultiOutputReceiver;
 import org.apache.beam.sdk.transforms.DoFn.OutputReceiver;
+import org.apache.beam.sdk.transforms.DoFn.SideInput;
 import org.apache.beam.sdk.transforms.DoFn.StateId;
 import org.apache.beam.sdk.transforms.DoFn.TimerId;
 import org.apache.beam.sdk.transforms.reflect.DoFnSignature.FieldAccessDeclaration;
 import org.apache.beam.sdk.transforms.reflect.DoFnSignature.Parameter;
 import org.apache.beam.sdk.transforms.reflect.DoFnSignature.Parameter.RestrictionTrackerParameter;
+import org.apache.beam.sdk.transforms.reflect.DoFnSignature.Parameter.SchemaElementParameter;
 import org.apache.beam.sdk.transforms.reflect.DoFnSignature.Parameter.StateParameter;
 import org.apache.beam.sdk.transforms.reflect.DoFnSignature.Parameter.TimerParameter;
 import org.apache.beam.sdk.transforms.reflect.DoFnSignature.Parameter.WindowParameter;
@@ -68,11 +70,11 @@ import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.Row;
 import org.apache.beam.sdk.values.TypeDescriptor;
 import org.apache.beam.sdk.values.TypeParameter;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.annotations.VisibleForTesting;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Predicates;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableList;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Maps;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.annotations.VisibleForTesting;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Predicates;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableList;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Maps;
 import org.joda.time.Instant;
 
 /** Utilities for working with {@link DoFnSignature}. See {@link #getSignature}. */
@@ -95,7 +97,8 @@ public class DoFnSignatures {
               Parameter.PaneInfoParameter.class,
               Parameter.PipelineOptionsParameter.class,
               Parameter.TimerParameter.class,
-              Parameter.StateParameter.class);
+              Parameter.StateParameter.class,
+              Parameter.SideInputParameter.class);
 
   private static final ImmutableList<Class<? extends Parameter>>
       ALLOWED_SPLITTABLE_PROCESS_ELEMENT_PARAMETERS =
@@ -106,7 +109,8 @@ public class DoFnSignatures {
               Parameter.OutputReceiverParameter.class,
               Parameter.TaggedOutputReceiverParameter.class,
               Parameter.ProcessContextParameter.class,
-              Parameter.RestrictionTrackerParameter.class);
+              Parameter.RestrictionTrackerParameter.class,
+              Parameter.SideInputParameter.class);
 
   private static final ImmutableList<Class<? extends Parameter>> ALLOWED_ON_TIMER_PARAMETERS =
       ImmutableList.of(
@@ -254,10 +258,13 @@ public class DoFnSignatures {
     public Map<String, TimerParameter> getTimerParameters() {
       return Collections.unmodifiableMap(timerParameters);
     }
-
     /** Extra parameters in their entirety. Unmodifiable. */
     public List<Parameter> getExtraParameters() {
       return Collections.unmodifiableList(extraParameters);
+    }
+
+    public void setParameter(int index, Parameter parameter) {
+      extraParameters.set(index, parameter);
     }
 
     /**
@@ -366,7 +373,7 @@ public class DoFnSignatures {
 
       TimerDeclaration timerDecl = fnContext.getTimerDeclarations().get(id);
       errors.checkArgument(
-          timerDecl.field().getDeclaringClass().equals(onTimerMethod.getDeclaringClass()),
+          timerDecl.field().getDeclaringClass().equals(getDeclaringClass(onTimerMethod)),
           "Callback %s is for timer %s declared in a different class %s."
               + " Timer callbacks must be declared in the same lexical scope as their timer",
           onTimerMethod,
@@ -472,6 +479,14 @@ public class DoFnSignatures {
     }
 
     return signature;
+  }
+
+  private static Class<?> getDeclaringClass(Method onTimerMethod) {
+    Class<?> declaringClass = onTimerMethod.getDeclaringClass();
+    if (declaringClass.getName().contains("$MockitoMock$")) {
+      declaringClass = declaringClass.getSuperclass();
+    }
+    return declaringClass;
   }
 
   /**
@@ -814,6 +829,16 @@ public class DoFnSignatures {
 
       methodContext.addParameter(extraParam);
     }
+    int schemaElementIndex = 0;
+    for (int i = 0; i < methodContext.getExtraParameters().size(); ++i) {
+      Parameter parameter = methodContext.getExtraParameters().get(i);
+      if (parameter instanceof SchemaElementParameter) {
+        SchemaElementParameter schemaParameter = (SchemaElementParameter) parameter;
+        schemaParameter = schemaParameter.toBuilder().setIndex(schemaElementIndex).build();
+        methodContext.setParameter(i, schemaParameter);
+        ++schemaElementIndex;
+      }
+    }
 
     // The allowed parameters depend on whether this DoFn is splittable
     if (methodContext.hasRestrictionTrackerParameter()) {
@@ -867,13 +892,13 @@ public class DoFnSignatures {
 
     ErrorReporter paramErrors = methodErrors.forParameter(param);
 
-    if (hasElementAnnotation(param.getAnnotations())) {
-      if (paramT.equals(inputT)) {
-        return Parameter.elementParameter(paramT);
-      } else {
-        String fieldAccessString = getFieldAccessId(param.getAnnotations());
-        return Parameter.schemaElementParameter(paramT, fieldAccessString);
-      }
+    String fieldAccessString = getFieldAccessId(param.getAnnotations());
+    if (fieldAccessString != null) {
+      return Parameter.schemaElementParameter(paramT, fieldAccessString, param.getIndex());
+    } else if (hasElementAnnotation(param.getAnnotations())) {
+      return (paramT.equals(inputT))
+          ? Parameter.elementParameter(paramT)
+          : Parameter.schemaElementParameter(paramT, null, param.getIndex());
     } else if (hasTimestampAnnotation(param.getAnnotations())) {
       methodErrors.checkArgument(
           rawType.equals(Instant.class),
@@ -881,6 +906,11 @@ public class DoFnSignatures {
       return Parameter.timestampParameter();
     } else if (rawType.equals(TimeDomain.class)) {
       return Parameter.timeDomainParameter();
+    } else if (hasSideInputAnnotation(param.getAnnotations())) {
+      String sideInputId = getSideInputId(param.getAnnotations());
+      paramErrors.checkArgument(
+          sideInputId != null, "%s missing %s annotation", SideInput.class.getSimpleName());
+      return Parameter.sideInputParameter(paramT, sideInputId);
     } else if (rawType.equals(PaneInfo.class)) {
       return Parameter.paneInfoParameter();
     } else if (rawType.equals(DoFn.ProcessContext.class)) {
@@ -954,7 +984,7 @@ public class DoFnSignatures {
           id);
 
       paramErrors.checkArgument(
-          timerDecl.field().getDeclaringClass().equals(param.getMethod().getDeclaringClass()),
+          timerDecl.field().getDeclaringClass().equals(getDeclaringClass(param.getMethod())),
           "%s %s declared in a different class %s."
               + " Timers may be referenced only in the lexical scope where they are declared.",
           TimerId.class.getSimpleName(),
@@ -993,7 +1023,7 @@ public class DoFnSignatures {
           formatType(stateDecl.stateType()));
 
       paramErrors.checkArgument(
-          stateDecl.field().getDeclaringClass().equals(param.getMethod().getDeclaringClass()),
+          stateDecl.field().getDeclaringClass().equals(getDeclaringClass(param.getMethod())),
           "%s %s declared in a different class %s."
               + " State may be referenced only in the class where it is declared.",
           StateId.class.getSimpleName(),
@@ -1033,6 +1063,12 @@ public class DoFnSignatures {
   }
 
   @Nullable
+  private static String getSideInputId(List<Annotation> annotations) {
+    DoFn.SideInput sideInputId = findFirstOfType(annotations, DoFn.SideInput.class);
+    return sideInputId != null ? sideInputId.value() : null;
+  }
+
+  @Nullable
   static <T> T findFirstOfType(List<Annotation> annotations, Class<T> clazz) {
     Optional<Annotation> annotation =
         annotations.stream().filter(a -> a.annotationType().equals(clazz)).findFirst();
@@ -1045,6 +1081,10 @@ public class DoFnSignatures {
 
   private static boolean hasTimestampAnnotation(List<Annotation> annotations) {
     return annotations.stream().anyMatch(a -> a.annotationType().equals(DoFn.Timestamp.class));
+  }
+
+  private static boolean hasSideInputAnnotation(List<Annotation> annotations) {
+    return annotations.stream().anyMatch(a -> a.annotationType().equals(DoFn.SideInput.class));
   }
 
   @Nullable

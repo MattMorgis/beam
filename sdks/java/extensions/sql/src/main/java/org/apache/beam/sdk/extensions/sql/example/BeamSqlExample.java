@@ -17,7 +17,6 @@
  */
 package org.apache.beam.sdk.extensions.sql.example;
 
-import javax.annotation.Nullable;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.extensions.sql.SqlTransform;
 import org.apache.beam.sdk.options.PipelineOptions;
@@ -39,7 +38,7 @@ import org.apache.beam.sdk.values.TupleTag;
  * <p>Run the example from the Beam source root with
  *
  * <pre>
- *   ./gradlew :beam-sdks-java-extensions-sql:runBasicExample
+ *   ./gradlew :sdks:java:extensions:sql:runBasicExample
  * </pre>
  *
  * <p>The above command executes the example locally using direct runner. Running the pipeline in
@@ -48,7 +47,7 @@ import org.apache.beam.sdk.values.TupleTag;
  */
 class BeamSqlExample {
   public static void main(String[] args) {
-    PipelineOptions options = PipelineOptionsFactory.fromArgs(args).as(PipelineOptions.class);
+    PipelineOptions options = PipelineOptionsFactory.fromArgs(args).create();
     Pipeline p = Pipeline.create(options);
 
     // define the input row format
@@ -75,14 +74,14 @@ class BeamSqlExample {
     outputStream.apply(
         "log_result",
         MapElements.via(
-            new SimpleFunction<Row, Void>() {
+            new SimpleFunction<Row, Row>() {
               @Override
-              public @Nullable Void apply(Row input) {
+              public Row apply(Row input) {
                 // expect output:
                 //  PCOLLECTION: [3, row, 3.0]
                 //  PCOLLECTION: [2, row, 2.0]
                 System.out.println("PCOLLECTION: " + input.getValues());
-                return null;
+                return input;
               }
             }));
 
@@ -95,13 +94,13 @@ class BeamSqlExample {
     outputStream2.apply(
         "log_result",
         MapElements.via(
-            new SimpleFunction<Row, Void>() {
+            new SimpleFunction<Row, Row>() {
               @Override
-              public @Nullable Void apply(Row input) {
+              public Row apply(Row input) {
                 // expect output:
                 //  CASE1_RESULT: [row, 5.0]
                 System.out.println("CASE1_RESULT: " + input.getValues());
-                return null;
+                return input;
               }
             }));
 

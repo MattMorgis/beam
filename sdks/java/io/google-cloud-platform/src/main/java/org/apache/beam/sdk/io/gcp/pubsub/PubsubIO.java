@@ -17,7 +17,7 @@
  */
 package org.apache.beam.sdk.io.gcp.pubsub;
 
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkState;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkState;
 
 import com.google.api.client.util.Clock;
 import com.google.auto.value.AutoValue;
@@ -28,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
@@ -64,9 +65,9 @@ import org.apache.beam.sdk.values.PBegin;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PDone;
 import org.apache.beam.sdk.values.Row;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.annotations.VisibleForTesting;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.MoreObjects;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.annotations.VisibleForTesting;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.MoreObjects;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
 import org.joda.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -440,6 +441,7 @@ public class PubsubIO {
   private static <T> Read<T> read() {
     return new AutoValue_PubsubIO_Read.Builder<T>()
         .setNeedsAttributes(false)
+        .setNeedsMessageId(false)
         .setPubsubClientFactory(FACTORY)
         .build();
   }
@@ -455,6 +457,23 @@ public class PubsubIO {
         .setCoder(PubsubMessagePayloadOnlyCoder.of())
         .setParseFn(new IdentityMessageFn())
         .setNeedsAttributes(false)
+        .setNeedsMessageId(false)
+        .build();
+  }
+
+  /**
+   * Returns A {@link PTransform} that continuously reads from a Google Cloud Pub/Sub stream. The
+   * messages will only contain a {@link PubsubMessage#getPayload() payload} with the {@link
+   * PubsubMessage#getMessageId() messageId} from PubSub, but no {@link
+   * PubsubMessage#getAttributeMap() attributes}.
+   */
+  public static Read<PubsubMessage> readMessagesWithMessageId() {
+    return new AutoValue_PubsubIO_Read.Builder<PubsubMessage>()
+        .setPubsubClientFactory(FACTORY)
+        .setCoder(PubsubMessageWithMessageIdCoder.of())
+        .setParseFn(new IdentityMessageFn())
+        .setNeedsAttributes(false)
+        .setNeedsMessageId(true)
         .build();
   }
 
@@ -469,6 +488,23 @@ public class PubsubIO {
         .setCoder(PubsubMessageWithAttributesCoder.of())
         .setParseFn(new IdentityMessageFn())
         .setNeedsAttributes(true)
+        .setNeedsMessageId(false)
+        .build();
+  }
+
+  /**
+   * Returns A {@link PTransform} that continuously reads from a Google Cloud Pub/Sub stream. The
+   * messages will contain both a {@link PubsubMessage#getPayload() payload} and {@link
+   * PubsubMessage#getAttributeMap() attributes}, along with the {@link PubsubMessage#getMessageId()
+   * messageId} from PubSub.
+   */
+  public static Read<PubsubMessage> readMessagesWithAttributesAndMessageId() {
+    return new AutoValue_PubsubIO_Read.Builder<PubsubMessage>()
+        .setPubsubClientFactory(FACTORY)
+        .setCoder(PubsubMessageWithAttributesAndMessageIdCoder.of())
+        .setParseFn(new IdentityMessageFn())
+        .setNeedsAttributes(true)
+        .setNeedsMessageId(true)
         .build();
   }
 
@@ -479,6 +515,7 @@ public class PubsubIO {
   public static Read<String> readStrings() {
     return new AutoValue_PubsubIO_Read.Builder<String>()
         .setNeedsAttributes(false)
+        .setNeedsMessageId(false)
         .setPubsubClientFactory(FACTORY)
         .setCoder(StringUtf8Coder.of())
         .setParseFn(new ParsePayloadAsUtf8())
@@ -496,6 +533,7 @@ public class PubsubIO {
     ProtoCoder<T> coder = ProtoCoder.of(messageClass);
     return new AutoValue_PubsubIO_Read.Builder<T>()
         .setNeedsAttributes(false)
+        .setNeedsMessageId(false)
         .setPubsubClientFactory(FACTORY)
         .setCoder(coder)
         .setParseFn(new ParsePayloadUsingCoder<>(coder))
@@ -513,9 +551,25 @@ public class PubsubIO {
     AvroCoder<T> coder = AvroCoder.of(clazz);
     return new AutoValue_PubsubIO_Read.Builder<T>()
         .setNeedsAttributes(false)
+        .setNeedsMessageId(false)
         .setPubsubClientFactory(FACTORY)
         .setCoder(coder)
         .setParseFn(new ParsePayloadUsingCoder<>(coder))
+        .build();
+  }
+
+  /**
+   * Returns A {@link PTransform} that continuously reads from a Google Cloud Pub/Sub stream,
+   * mapping each {@link PubsubMessage} into type T using the supplied parse function and coder.
+   */
+  public static <T> Read<T> readMessagesWithCoderAndParseFn(
+      Coder<T> coder, SimpleFunction<PubsubMessage, T> parseFn) {
+    return new AutoValue_PubsubIO_Read.Builder<T>()
+        .setNeedsAttributes(false)
+        .setNeedsMessageId(false)
+        .setPubsubClientFactory(FACTORY)
+        .setCoder(coder)
+        .setParseFn(parseFn)
         .build();
   }
 
@@ -532,6 +586,7 @@ public class PubsubIO {
     AvroCoder<GenericRecord> coder = AvroCoder.of(GenericRecord.class, avroSchema);
     return new AutoValue_PubsubIO_Read.Builder<GenericRecord>()
         .setNeedsAttributes(false)
+        .setNeedsMessageId(false)
         .setPubsubClientFactory(FACTORY)
         .setBeamSchema(schema)
         .setToRowFn(AvroUtils.getToRowFunction(GenericRecord.class, avroSchema))
@@ -557,6 +612,7 @@ public class PubsubIO {
     Schema schema = AvroUtils.getSchema(clazz, null);
     return new AutoValue_PubsubIO_Read.Builder<T>()
         .setNeedsAttributes(false)
+        .setNeedsMessageId(false)
         .setPubsubClientFactory(FACTORY)
         .setBeamSchema(schema)
         .setToRowFn(AvroUtils.getToRowFunction(clazz, avroSchema))
@@ -609,6 +665,9 @@ public class PubsubIO {
     abstract ValueProvider<PubsubTopic> getTopicProvider();
 
     @Nullable
+    abstract PubsubClient.PubsubClientFactory getPubsubClientFactory();
+
+    @Nullable
     abstract ValueProvider<PubsubSubscription> getSubscriptionProvider();
 
     /** The name of the message attribute to read timestamps from. */
@@ -636,18 +695,20 @@ public class PubsubIO {
     @Nullable
     abstract SerializableFunction<Row, T> getFromRowFn();
 
-    abstract PubsubClient.PubsubClientFactory getPubsubClientFactory();
-
     @Nullable
     abstract Clock getClock();
 
     abstract boolean getNeedsAttributes();
+
+    abstract boolean getNeedsMessageId();
 
     abstract Builder<T> toBuilder();
 
     @AutoValue.Builder
     abstract static class Builder<T> {
       abstract Builder<T> setTopicProvider(ValueProvider<PubsubTopic> topic);
+
+      abstract Builder<T> setPubsubClientFactory(PubsubClient.PubsubClientFactory clientFactory);
 
       abstract Builder<T> setSubscriptionProvider(ValueProvider<PubsubSubscription> subscription);
 
@@ -667,7 +728,7 @@ public class PubsubIO {
 
       abstract Builder<T> setNeedsAttributes(boolean needsAttributes);
 
-      abstract Builder<T> setPubsubClientFactory(PubsubClient.PubsubClientFactory clientFactory);
+      abstract Builder<T> setNeedsMessageId(boolean needsMessageId);
 
       abstract Builder<T> setClock(@Nullable Clock clock);
 
@@ -726,6 +787,16 @@ public class PubsubIO {
     }
 
     /**
+     * The default client to write to Pub/Sub is the {@link PubsubJsonClient}, created by the {@link
+     * PubsubJsonClient.PubsubJsonClientFactory}. This function allows to change the Pub/Sub client
+     * by providing another {@link PubsubClient.PubsubClientFactory} like the {@link
+     * PubsubGrpcClientFactory}.
+     */
+    public Read<T> withClientFactory(PubsubClient.PubsubClientFactory factory) {
+      return toBuilder().setPubsubClientFactory(factory).build();
+    }
+
+    /**
      * When reading from Cloud Pub/Sub where record timestamps are provided as Pub/Sub message
      * attributes, specifies the name of the attribute that contains the timestamp.
      *
@@ -776,18 +847,8 @@ public class PubsubIO {
      * output type T must be registered or set on the output via {@link
      * PCollection#setCoder(Coder)}.
      */
-    private Read<T> withCoderAndParseFn(Coder<T> coder, SimpleFunction<PubsubMessage, T> parseFn) {
+    public Read<T> withCoderAndParseFn(Coder<T> coder, SimpleFunction<PubsubMessage, T> parseFn) {
       return toBuilder().setCoder(coder).setParseFn(parseFn).build();
-    }
-
-    @VisibleForTesting
-    /**
-     * Set's the PubsubClientFactory.
-     *
-     * <p>Only for use by unit tests.
-     */
-    Read<T> withClientFactory(PubsubClient.PubsubClientFactory clientFactory) {
-      return toBuilder().setPubsubClientFactory(clientFactory).build();
     }
 
     @VisibleForTesting
@@ -824,13 +885,14 @@ public class PubsubIO {
       PubsubUnboundedSource source =
           new PubsubUnboundedSource(
               getClock(),
-              getPubsubClientFactory(),
+              Optional.ofNullable(getPubsubClientFactory()).orElse(FACTORY),
               null /* always get project from runtime PipelineOptions */,
               topicPath,
               subscriptionPath,
               getTimestampAttribute(),
               getIdAttribute(),
-              getNeedsAttributes());
+              getNeedsAttributes(),
+              getNeedsMessageId());
       PCollection<T> read = input.apply(source).apply(MapElements.via(getParseFn()));
       return (getBeamSchema() != null)
           ? read.setSchema(getBeamSchema(), getToRowFn(), getFromRowFn())
@@ -856,11 +918,19 @@ public class PubsubIO {
   /** Implementation of {@link #write}. */
   @AutoValue
   public abstract static class Write<T> extends PTransform<PCollection<T>, PDone> {
-    private static final int MAX_PUBLISH_BATCH_BYTE_SIZE_DEFAULT = 10 * 1024 * 1024;
+    /**
+     * Max batch byte size. Messages are base64 encoded which encodes each set of three bytes into
+     * four bytes.
+     */
+    private static final int MAX_PUBLISH_BATCH_BYTE_SIZE_DEFAULT = ((10 * 1024 * 1024) / 4) * 3;
+
     private static final int MAX_PUBLISH_BATCH_SIZE = 100;
 
     @Nullable
     abstract ValueProvider<PubsubTopic> getTopicProvider();
+
+    @Nullable
+    abstract PubsubClient.PubsubClientFactory getPubsubClientFactory();
 
     /** the batch size for bulk submissions to pubsub. */
     @Nullable
@@ -887,6 +957,8 @@ public class PubsubIO {
     @AutoValue.Builder
     abstract static class Builder<T> {
       abstract Builder<T> setTopicProvider(ValueProvider<PubsubTopic> topicProvider);
+
+      abstract Builder<T> setPubsubClientFactory(PubsubClient.PubsubClientFactory factory);
 
       abstract Builder<T> setMaxBatchSize(Integer batchSize);
 
@@ -916,6 +988,16 @@ public class PubsubIO {
       return toBuilder()
           .setTopicProvider(NestedValueProvider.of(topic, new TopicTranslator()))
           .build();
+    }
+
+    /**
+     * The default client to write to Pub/Sub is the {@link PubsubJsonClient}, created by the {@link
+     * PubsubJsonClient.PubsubJsonClientFactory}. This function allows to change the Pub/Sub client
+     * by providing another {@link PubsubClient.PubsubClientFactory} like the {@link
+     * PubsubGrpcClientFactory}.
+     */
+    public Write<T> withClientFactory(PubsubClient.PubsubClientFactory factory) {
+      return toBuilder().setPubsubClientFactory(factory).build();
     }
 
     /**
@@ -996,7 +1078,7 @@ public class PubsubIO {
               .apply(MapElements.via(getFormatFn()))
               .apply(
                   new PubsubUnboundedSink(
-                      FACTORY,
+                      Optional.ofNullable(getPubsubClientFactory()).orElse(FACTORY),
                       NestedValueProvider.of(getTopicProvider(), new TopicPathTranslator()),
                       getTimestampAttribute(),
                       getIdAttribute(),
@@ -1046,8 +1128,10 @@ public class PubsubIO {
 
         // NOTE: idAttribute is ignored.
         this.pubsubClient =
-            FACTORY.newClient(
-                getTimestampAttribute(), null, c.getPipelineOptions().as(PubsubOptions.class));
+            Optional.ofNullable(getPubsubClientFactory())
+                .orElse(FACTORY)
+                .newClient(
+                    getTimestampAttribute(), null, c.getPipelineOptions().as(PubsubOptions.class));
       }
 
       @ProcessElement

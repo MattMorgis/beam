@@ -17,7 +17,7 @@
  */
 package org.apache.beam.runners.fnexecution.environment;
 
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.MoreObjects.firstNonNull;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.MoreObjects.firstNonNull;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -39,9 +39,9 @@ import org.apache.beam.runners.fnexecution.provisioning.StaticGrpcProvisionServi
 import org.apache.beam.sdk.fn.IdGenerator;
 import org.apache.beam.sdk.options.ManualDockerEnvironmentOptions;
 import org.apache.beam.sdk.options.PipelineOptions;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableList;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.net.HostAndPort;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableList;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.net.HostAndPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -132,10 +132,6 @@ public class DockerEnvironmentFactory implements EnvironmentFactory {
             // host networking on Mac)
             .add("--env=DOCKER_MAC_CONTAINER=" + System.getenv("DOCKER_MAC_CONTAINER"));
 
-    if (!retainDockerContainer) {
-      dockerArgsBuilder.add("--rm");
-    }
-
     List<String> args =
         ImmutableList.of(
             String.format("--id=%s", workerId),
@@ -152,26 +148,34 @@ public class DockerEnvironmentFactory implements EnvironmentFactory {
       containerId = docker.runImage(containerImage, dockerArgsBuilder.build(), args);
       LOG.debug("Created Docker Container with Container ID {}", containerId);
       // Wait on a client from the gRPC server.
-      while (instructionHandler == null) {
+      try {
+        instructionHandler = clientSource.take(workerId, Duration.ofMinutes(1));
+      } catch (TimeoutException timeoutEx) {
+        RuntimeException runtimeException =
+            new RuntimeException(
+                String.format(
+                    "Docker container %s failed to start up successfully within 1 minute.",
+                    containerImage),
+                timeoutEx);
         try {
-          instructionHandler = clientSource.take(workerId, Duration.ofMinutes(1));
-        } catch (TimeoutException timeoutEx) {
-          Preconditions.checkArgument(
-              docker.isContainerRunning(containerId), "No container running for id " + containerId);
-          LOG.info(
-              "Still waiting for startup of environment {} for worker id {}",
-              dockerPayload.getContainerImage(),
-              workerId);
-        } catch (InterruptedException interruptEx) {
-          Thread.currentThread().interrupt();
-          throw new RuntimeException(interruptEx);
+          String containerLogs = docker.getContainerLogs(containerId);
+          LOG.error("Docker container {} logs:\n{}", containerId, containerLogs);
+        } catch (Exception getLogsException) {
+          runtimeException.addSuppressed(getLogsException);
         }
+        throw runtimeException;
+      } catch (InterruptedException interruptEx) {
+        Thread.currentThread().interrupt();
+        throw new RuntimeException(interruptEx);
       }
     } catch (Exception e) {
       if (containerId != null) {
         // Kill the launched docker container if we can't retrieve a client for it.
         try {
           docker.killContainer(containerId);
+          if (!retainDockerContainer) {
+            docker.removeContainer(containerId);
+          }
         } catch (Exception dockerException) {
           e.addSuppressed(dockerException);
         }
@@ -179,7 +183,8 @@ public class DockerEnvironmentFactory implements EnvironmentFactory {
       throw e;
     }
 
-    return DockerContainerEnvironment.create(docker, environment, containerId, instructionHandler);
+    return DockerContainerEnvironment.create(
+        docker, environment, containerId, instructionHandler, retainDockerContainer);
   }
 
   private List<String> gcsCredentialArgs() {
@@ -206,7 +211,7 @@ public class DockerEnvironmentFactory implements EnvironmentFactory {
    * hostname has historically changed between versions, so this is subject to breakages and will
    * likely only support the latest version at any time.
    */
-  private static class DockerOnMac {
+  static class DockerOnMac {
     // TODO: This host name seems to change with every other Docker release. Do we attempt to keep
     // up
     // or attempt to document the supported Docker version(s)?
@@ -220,7 +225,7 @@ public class DockerEnvironmentFactory implements EnvironmentFactory {
     private static final int MAC_PORT_END = 8200;
     private static final AtomicInteger MAC_PORT = new AtomicInteger(MAC_PORT_START);
 
-    private static ServerFactory getServerFactory() {
+    static ServerFactory getServerFactory() {
       ServerFactory.UrlFactory dockerUrlFactory =
           (host, port) -> HostAndPort.fromParts(DOCKER_FOR_MAC_HOST, port).toString();
       if (RUNNING_INSIDE_DOCKER_ON_MAC) {

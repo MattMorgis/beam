@@ -17,7 +17,6 @@ package dataflowlib
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	// Importing to get the side effect of the remote execution hook. See init().
 	_ "github.com/apache/beam/sdks/go/pkg/beam/core/runtime/harness/init"
 	"github.com/apache/beam/sdks/go/pkg/beam/core/runtime/pipelinex"
+	"github.com/apache/beam/sdks/go/pkg/beam/internal/errors"
 	"github.com/apache/beam/sdks/go/pkg/beam/log"
 	pb "github.com/apache/beam/sdks/go/pkg/beam/model/pipeline_v1"
 	"golang.org/x/oauth2/google"
@@ -41,13 +41,15 @@ type JobOptions struct {
 	// Pipeline options
 	Options runtime.RawOptions
 
-	Project     string
-	Region      string
-	Zone        string
-	Network     string
-	NumWorkers  int64
-	MachineType string
-	Labels      map[string]string
+	Project             string
+	Region              string
+	Zone                string
+	Network             string
+	Subnetwork          string
+	NumWorkers          int64
+	MachineType         string
+	Labels              map[string]string
+	ServiceAccountEmail string
 
 	// Autoscaling settings
 	Algorithm     string
@@ -85,7 +87,7 @@ func Translate(p *pb.Pipeline, opts *JobOptions, workerURL, jarURL, modelURL str
 
 	images := pipelinex.ContainerImages(p)
 	if len(images) != 1 {
-		return nil, fmt.Errorf("Dataflow supports one container image only: %v", images)
+		return nil, errors.Errorf("Dataflow supports one container image only: %v", images)
 	}
 
 	packages := []*df.Package{{
@@ -108,6 +110,7 @@ func Translate(p *pb.Pipeline, opts *JobOptions, workerURL, jarURL, modelURL str
 		Name:      opts.Name,
 		Type:      jobType,
 		Environment: &df.Environment{
+			ServiceAccountEmail: opts.ServiceAccountEmail,
 			UserAgent: newMsg(userAgent{
 				Name:    "Apache Beam SDK for Go",
 				Version: "0.5.0",
@@ -135,6 +138,7 @@ func Translate(p *pb.Pipeline, opts *JobOptions, workerURL, jarURL, modelURL str
 				NumWorkers:                  1,
 				MachineType:                 opts.MachineType,
 				Network:                     opts.Network,
+				Subnetwork:                  opts.Subnetwork,
 				Zone:                        opts.Zone,
 			}},
 			TempStoragePrefix: opts.TempLocation,
@@ -177,7 +181,7 @@ func WaitForCompletion(ctx context.Context, client *df.Service, project, region,
 	for {
 		j, err := client.Projects.Locations.Jobs.Get(project, region, jobID).Do()
 		if err != nil {
-			return fmt.Errorf("failed to get job: %v", err)
+			return errors.Wrap(err, "failed to get job")
 		}
 
 		switch j.CurrentState {
@@ -190,7 +194,7 @@ func WaitForCompletion(ctx context.Context, client *df.Service, project, region,
 			return nil
 
 		case "JOB_STATE_FAILED":
-			return fmt.Errorf("job %s failed", jobID)
+			return errors.Errorf("job %s failed", jobID)
 
 		case "JOB_STATE_RUNNING":
 			log.Info(ctx, "Job still running ...")
@@ -241,6 +245,7 @@ func printOptions(opts *JobOptions, images []string) []*displayData {
 	addIfNonEmpty("region", opts.Region)
 	addIfNonEmpty("zone", opts.Zone)
 	addIfNonEmpty("network", opts.Network)
+	addIfNonEmpty("subnetwork", opts.Subnetwork)
 	addIfNonEmpty("machine_type", opts.MachineType)
 	addIfNonEmpty("container_images", strings.Join(images, ","))
 	addIfNonEmpty("temp_location", opts.TempLocation)

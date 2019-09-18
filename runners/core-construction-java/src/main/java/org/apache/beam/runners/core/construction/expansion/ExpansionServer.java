@@ -20,9 +20,9 @@ package org.apache.beam.runners.core.construction.expansion;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.concurrent.TimeUnit;
-import org.apache.beam.vendor.grpc.v1p13p1.io.grpc.Server;
-import org.apache.beam.vendor.grpc.v1p13p1.io.grpc.netty.NettyServerBuilder;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions;
+import org.apache.beam.vendor.grpc.v1p21p0.io.grpc.Server;
+import org.apache.beam.vendor.grpc.v1p21p0.io.grpc.netty.NettyServerBuilder;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions;
 
 /** A {@link Server gRPC Server} for an ExpansionService. */
 public class ExpansionServer implements AutoCloseable {
@@ -38,6 +38,7 @@ public class ExpansionServer implements AutoCloseable {
   }
 
   private final String host;
+  private final int port;
   private final Server server;
   private final ExpansionService service;
 
@@ -49,11 +50,7 @@ public class ExpansionServer implements AutoCloseable {
             .addService(service)
             .build()
             .start();
-  }
-
-  /** Get the ExpansionService exposed by this {@link ExpansionServer}. */
-  public ExpansionService getService() {
-    return service;
+    this.port = server.getPort();
   }
 
   /** Get the host that this {@link ExpansionServer} is bound to. */
@@ -63,7 +60,7 @@ public class ExpansionServer implements AutoCloseable {
 
   /** Get the port that this {@link ExpansionServer} is bound to. */
   public int getPort() {
-    return server.getPort();
+    return port;
   }
 
   @Override

@@ -23,6 +23,8 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.ServiceLoader;
 import org.apache.beam.model.pipeline.v1.RunnerApi;
+import org.apache.beam.runners.core.construction.renderer.PipelineDotRenderer;
+import org.apache.beam.runners.fnexecution.jobsubmission.PortablePipelineResult;
 import org.apache.beam.runners.samza.translation.ConfigBuilder;
 import org.apache.beam.runners.samza.translation.PViewToIdMapper;
 import org.apache.beam.runners.samza.translation.PortableTranslationContext;
@@ -30,13 +32,12 @@ import org.apache.beam.runners.samza.translation.SamzaPipelineTranslator;
 import org.apache.beam.runners.samza.translation.SamzaPortablePipelineTranslator;
 import org.apache.beam.runners.samza.translation.SamzaTransformOverrides;
 import org.apache.beam.runners.samza.translation.TranslationContext;
-import org.apache.beam.runners.samza.util.PipelineDotRenderer;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineRunner;
 import org.apache.beam.sdk.metrics.MetricsEnvironment;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.values.PValue;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterators;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterators;
 import org.apache.samza.application.StreamApplication;
 import org.apache.samza.config.Config;
 import org.apache.samza.context.ExternalContext;
@@ -70,7 +71,7 @@ public class SamzaRunner extends PipelineRunner<SamzaPipelineResult> {
         listenerReg.hasNext() ? Iterators.getOnlyElement(listenerReg).getLifeCycleListener() : null;
   }
 
-  public SamzaPipelineResult runPortablePipeline(RunnerApi.Pipeline pipeline) {
+  public PortablePipelineResult runPortablePipeline(RunnerApi.Pipeline pipeline) {
     final ConfigBuilder configBuilder = new ConfigBuilder(options);
     SamzaPortablePipelineTranslator.createConfig(pipeline, configBuilder, options);
 
@@ -78,18 +79,22 @@ public class SamzaRunner extends PipelineRunner<SamzaPipelineResult> {
     options.setConfigOverride(config);
 
     if (listener != null) {
-      listener.onInit(config);
+      listener.onInit(config, options);
     }
 
     final SamzaExecutionContext executionContext = new SamzaExecutionContext(options);
+    final Map<String, MetricsReporterFactory> reporterFactories = getMetricsReporters();
     final StreamApplication app =
         appDescriptor -> {
-          appDescriptor.withApplicationContainerContextFactory(executionContext.new Factory());
+          appDescriptor
+              .withApplicationContainerContextFactory(executionContext.new Factory())
+              .withMetricsReporterFactories(reporterFactories);
           SamzaPortablePipelineTranslator.translate(
               pipeline, new PortableTranslationContext(appDescriptor, options));
         };
 
-    return runSamzaApp(app, config, executionContext);
+    ApplicationRunner runner = runSamzaApp(app, config);
+    return new SamzaPortablePipelineResult(app, runner, executionContext, listener, config);
   }
 
   @Override
@@ -113,7 +118,7 @@ public class SamzaRunner extends PipelineRunner<SamzaPipelineResult> {
     options.setConfigOverride(config);
 
     if (listener != null) {
-      listener.onInit(config);
+      listener.onInit(config, options);
     }
 
     final SamzaExecutionContext executionContext = new SamzaExecutionContext(options);
@@ -128,7 +133,8 @@ public class SamzaRunner extends PipelineRunner<SamzaPipelineResult> {
               pipeline, new TranslationContext(appDescriptor, idMap, options));
         };
 
-    return runSamzaApp(app, config, executionContext);
+    ApplicationRunner runner = runSamzaApp(app, config);
+    return new SamzaPipelineResult(app, runner, executionContext, listener, config);
   }
 
   private Map<String, MetricsReporterFactory> getMetricsReporters() {
@@ -147,12 +153,9 @@ public class SamzaRunner extends PipelineRunner<SamzaPipelineResult> {
     }
   }
 
-  private SamzaPipelineResult runSamzaApp(
-      StreamApplication app, Config config, SamzaExecutionContext executionContext) {
+  private ApplicationRunner runSamzaApp(StreamApplication app, Config config) {
 
     final ApplicationRunner runner = ApplicationRunners.getApplicationRunner(app, config);
-    final SamzaPipelineResult result =
-        new SamzaPipelineResult(app, runner, executionContext, listener);
 
     ExternalContext externalContext = null;
     if (listener != null) {
@@ -166,6 +169,6 @@ public class SamzaRunner extends PipelineRunner<SamzaPipelineResult> {
       listener.onSubmit();
     }
 
-    return result;
+    return runner;
   }
 }

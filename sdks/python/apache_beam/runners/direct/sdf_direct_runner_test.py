@@ -29,6 +29,7 @@ import apache_beam as beam
 from apache_beam import Create
 from apache_beam import DoFn
 from apache_beam.io import filebasedsource_test
+from apache_beam.io.restriction_trackers import OffsetRange
 from apache_beam.io.restriction_trackers import OffsetRestrictionTracker
 from apache_beam.pvalue import AsList
 from apache_beam.pvalue import AsSingleton
@@ -45,10 +46,10 @@ class ReadFilesProvider(RestrictionProvider):
 
   def initial_restriction(self, element):
     size = os.path.getsize(element)
-    return (0, size)
+    return OffsetRange(0, size)
 
   def create_tracker(self, restriction):
-    return OffsetRestrictionTracker(*restriction)
+    return OffsetRestrictionTracker(restriction)
 
 
 class ReadFiles(DoFn):
@@ -57,7 +58,10 @@ class ReadFiles(DoFn):
     self._resume_count = resume_count
 
   def process(
-      self, element, restriction_tracker=ReadFilesProvider(), *args, **kwargs):
+      self,
+      element,
+      restriction_tracker=DoFn.RestrictionParam(ReadFilesProvider()),
+      *args, **kwargs):
     file_name = element
     assert isinstance(restriction_tracker, OffsetRestrictionTracker)
 
@@ -91,11 +95,12 @@ class ReadFiles(DoFn):
 class ExpandStringsProvider(RestrictionProvider):
 
   def initial_restriction(self, element):
-    return (0, len(element[0]))
+    return OffsetRange(0, len(element[0]))
 
   def create_tracker(self, restriction):
-    return OffsetRestrictionTracker(restriction[0], restriction[1])
+    return OffsetRestrictionTracker(restriction)
 
+  # No initial split performed.
   def split(self, element, restriction):
     return [restriction,]
 
@@ -107,7 +112,7 @@ class ExpandStrings(DoFn):
 
   def process(
       self, element, side1, side2, side3, window=beam.DoFn.WindowParam,
-      restriction_tracker=ExpandStringsProvider(),
+      restriction_tracker=DoFn.RestrictionParam(ExpandStringsProvider()),
       *args, **kwargs):
     side = []
     side.extend(side1)

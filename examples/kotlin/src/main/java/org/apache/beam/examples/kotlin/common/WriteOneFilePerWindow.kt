@@ -30,7 +30,7 @@ import org.apache.beam.sdk.transforms.windowing.IntervalWindow
 import org.apache.beam.sdk.transforms.windowing.PaneInfo
 import org.apache.beam.sdk.values.PCollection
 import org.apache.beam.sdk.values.PDone
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.MoreObjects.firstNonNull
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.MoreObjects.firstNonNull
 import org.joda.time.format.ISODateTimeFormat
 
 /**
@@ -49,9 +49,8 @@ class WriteOneFilePerWindow(private val filenamePrefix: String, private val numS
                 .to(PerWindowFiles(resource))
                 .withTempDirectory(resource.currentDirectory)
                 .withWindowedWrites()
-        if (numShards != null) {
-            write = write.withNumShards(numShards)
-        }
+
+        write = numShards?.let { write.withNumShards(it) }
         return input.apply(write)
     }
 
@@ -65,8 +64,7 @@ class WriteOneFilePerWindow(private val filenamePrefix: String, private val numS
 
         fun filenamePrefixForWindow(window: IntervalWindow): String {
             val prefix = if (baseFilename.isDirectory) "" else firstNonNull(baseFilename.filename, "")
-            return String.format(
-                    "%s-%s-%s", prefix, FORMATTER.print(window.start()), FORMATTER.print(window.end()))
+            return "$prefix-${FORMATTER.print(window.start())}-${FORMATTER.print(window.end())}"
         }
 
         override fun windowedFilename(
@@ -76,12 +74,7 @@ class WriteOneFilePerWindow(private val filenamePrefix: String, private val numS
                 paneInfo: PaneInfo,
                 outputFileHints: OutputFileHints): ResourceId {
             val intervalWindow = window as IntervalWindow
-            val filename = String.format(
-                    "%s-%s-of-%s%s",
-                    filenamePrefixForWindow(intervalWindow),
-                    shardNumber,
-                    numShards,
-                    outputFileHints.suggestedFilenameSuffix)
+            val filename = "${filenamePrefixForWindow(intervalWindow)}-$shardNumber-of-$numShards${outputFileHints.suggestedFilenameSuffix}"
             return baseFilename
                     .currentDirectory
                     .resolve(filename, StandardResolveOptions.RESOLVE_FILE)

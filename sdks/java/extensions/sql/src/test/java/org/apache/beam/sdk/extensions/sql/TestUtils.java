@@ -17,7 +17,7 @@
  */
 package org.apache.beam.sdk.extensions.sql;
 
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkArgument;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -98,6 +98,14 @@ public class TestUtils {
      */
     public static RowsBuilder of(final Object... args) {
       Schema beamSQLSchema = TestTableUtils.buildBeamSqlSchema(args);
+      RowsBuilder builder = new RowsBuilder();
+      builder.type = beamSQLSchema;
+
+      return builder;
+    }
+
+    public static RowsBuilder ofNullable(final Object... args) {
+      Schema beamSQLSchema = TestTableUtils.buildBeamSqlNullableSchema(args);
       RowsBuilder builder = new RowsBuilder();
       builder.type = beamSQLSchema;
 

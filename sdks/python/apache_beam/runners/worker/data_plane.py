@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-"""Implementation of DataChannels for communicating across the data plane."""
+"""Implementation of ``DataChannel``s to communicate across the data plane."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -74,12 +74,13 @@ class DataChannel(with_metaclass(abc.ABCMeta, object)):
 
   Read from this channel with the input_elements method::
 
-    for elements_data in data_channel.input_elements(instruction_id, targets):
+    for elements_data in data_channel.input_elements(
+        instruction_id, transform_ids):
       [process elements_data]
 
   Write to this channel using the output_stream method::
 
-    out1 = data_channel.output_stream(instruction_id, target1)
+    out1 = data_channel.output_stream(instruction_id, transform_id)
     out1.write(...)
     out1.close()
 
@@ -90,27 +91,27 @@ class DataChannel(with_metaclass(abc.ABCMeta, object)):
 
   @abc.abstractmethod
   def input_elements(
-      self, instruction_id, expected_targets, abort_callback=None):
+      self, instruction_id, expected_transforms, abort_callback=None):
     """Returns an iterable of all Element.Data bundles for instruction_id.
 
     This iterable terminates only once the full set of data has been recieved
-    for each of the expected targets. It may block waiting for more data.
+    for each of the expected transforms. It may block waiting for more data.
 
     Args:
         instruction_id: which instruction the results must belong to
-        expected_targets: which targets to wait on for completion
+        expected_transforms: which transforms to wait on for completion
         abort_callback: a callback to invoke if blocking returning whether
             to abort before consuming all the data
     """
     raise NotImplementedError(type(self))
 
   @abc.abstractmethod
-  def output_stream(self, instruction_id, target):
-    """Returns an output stream writing elements to target.
+  def output_stream(self, instruction_id, transform_id):
+    """Returns an output stream writing elements to transform_id.
 
     Args:
         instruction_id: which instruction this stream belongs to
-        target: the target of the returned stream
+        transform_id: the transform_id of the returned stream
     """
     raise NotImplementedError(type(self))
 
@@ -140,7 +141,7 @@ class InMemoryDataChannel(DataChannel):
   def inverse(self):
     return self._inverse
 
-  def input_elements(self, instruction_id, unused_expected_targets=None,
+  def input_elements(self, instruction_id, unused_expected_transforms=None,
                      abort_callback=None):
     other_inputs = []
     for data in self._inputs:
@@ -151,12 +152,12 @@ class InMemoryDataChannel(DataChannel):
         other_inputs.append(data)
     self._inputs = other_inputs
 
-  def output_stream(self, instruction_id, target):
+  def output_stream(self, instruction_id, transform_id):
     def add_to_inverse_output(data):
       self._inverse._inputs.append(  # pylint: disable=protected-access
           beam_fn_api_pb2.Elements.Data(
               instruction_reference=instruction_id,
-              target=target,
+              ptransform_id=transform_id,
               data=data))
     return ClosableOutputStream(
         add_to_inverse_output, flush_callback=add_to_inverse_output)
@@ -193,7 +194,7 @@ class _GrpcDataChannel(DataChannel):
     with self._receive_lock:
       self._received.pop(instruction_id)
 
-  def input_elements(self, instruction_id, expected_targets,
+  def input_elements(self, instruction_id, expected_transforms,
                      abort_callback=None):
     """
     Generator to retrieve elements for an instruction_id
@@ -201,13 +202,13 @@ class _GrpcDataChannel(DataChannel):
 
     Args:
       instruction_id(str): instruction_id for which data is read
-      expected_targets(collection): expected targets
+      expected_transforms(collection): expected transforms
     """
     received = self._receiving_queue(instruction_id)
-    done_targets = []
+    done_transforms = []
     abort_callback = abort_callback or (lambda: False)
     try:
-      while len(done_targets) < len(expected_targets):
+      while len(done_transforms) < len(expected_transforms):
         try:
           data = received.get(timeout=1)
         except queue.Empty:
@@ -219,23 +220,23 @@ class _GrpcDataChannel(DataChannel):
             t, v, tb = self._exc_info
             raise_(t, v, tb)
         else:
-          if not data.data and data.target in expected_targets:
-            done_targets.append(data.target)
+          if not data.data and data.ptransform_id in expected_transforms:
+            done_transforms.append(data.ptransform_id)
           else:
-            assert data.target not in done_targets
+            assert data.ptransform_id not in done_transforms
             yield data
     finally:
       # Instruction_ids are not reusable so Clean queue once we are done with
       #  an instruction_id
       self._clean_receiving_queue(instruction_id)
 
-  def output_stream(self, instruction_id, target):
+  def output_stream(self, instruction_id, transform_id):
     def add_to_send_queue(data):
       if data:
         self._to_send.put(
             beam_fn_api_pb2.Elements.Data(
                 instruction_reference=instruction_id,
-                target=target,
+                ptransform_id=transform_id,
                 data=data))
 
     def close_callback(data):
@@ -244,7 +245,7 @@ class _GrpcDataChannel(DataChannel):
       self._to_send.put(
           beam_fn_api_pb2.Elements.Data(
               instruction_reference=instruction_id,
-              target=target,
+              ptransform_id=transform_id,
               data=b''))
     return ClosableOutputStream(
         close_callback, flush_callback=add_to_send_queue)
@@ -273,14 +274,14 @@ class _GrpcDataChannel(DataChannel):
           self._receiving_queue(data.instruction_reference).put(data)
     except:  # pylint: disable=bare-except
       if not self._closed:
-        logging.exception('Failed to read inputs in the data plane')
+        logging.exception('Failed to read inputs in the data plane.')
         self._exc_info = sys.exc_info()
         raise
     finally:
       self._closed = True
       self._reads_finished.set()
 
-  def _start_reader(self, elements_iterator):
+  def set_inputs(self, elements_iterator):
     reader = threading.Thread(
         target=lambda: self._read_inputs(elements_iterator),
         name='read_grpc_client_inputs')
@@ -293,16 +294,26 @@ class GrpcClientDataChannel(_GrpcDataChannel):
 
   def __init__(self, data_stub):
     super(GrpcClientDataChannel, self).__init__()
-    self._start_reader(data_stub.Data(self._write_outputs()))
+    self.set_inputs(data_stub.Data(self._write_outputs()))
 
 
-class GrpcServerDataChannel(
-    beam_fn_api_pb2_grpc.BeamFnDataServicer, _GrpcDataChannel):
-  """A DataChannel wrapping the server side of a BeamFnData connection."""
+class BeamFnDataServicer(beam_fn_api_pb2_grpc.BeamFnDataServicer):
+  """Implementation of BeamFnDataServicer for any number of clients"""
+
+  def __init__(self):
+    self._lock = threading.Lock()
+    self._connections_by_worker_id = collections.defaultdict(
+        _GrpcDataChannel)
+
+  def get_conn_by_worker_id(self, worker_id):
+    with self._lock:
+      return self._connections_by_worker_id[worker_id]
 
   def Data(self, elements_iterator, context):
-    self._start_reader(elements_iterator)
-    for elements in self._write_outputs():
+    worker_id = dict(context.invocation_metadata()).get('worker_id')
+    data_conn = self.get_conn_by_worker_id(worker_id)
+    data_conn.set_inputs(elements_iterator)
+    for elements in data_conn._write_outputs():
       yield elements
 
 
@@ -326,10 +337,11 @@ class GrpcClientDataChannelFactory(DataChannelFactory):
   Caches the created channels by ``data descriptor url``.
   """
 
-  def __init__(self, credentials=None):
+  def __init__(self, credentials=None, worker_id=None):
     self._data_channel_cache = {}
     self._lock = threading.Lock()
     self._credentials = None
+    self._worker_id = worker_id
     if credentials is not None:
       logging.info('Using secure channel creds.')
       self._credentials = credentials
@@ -339,7 +351,7 @@ class GrpcClientDataChannelFactory(DataChannelFactory):
     if url not in self._data_channel_cache:
       with self._lock:
         if url not in self._data_channel_cache:
-          logging.info('Creating channel for %s', url)
+          logging.info('Creating client data channel for %s', url)
           # Options to have no limits (-1) on the size of the messages
           # received or sent over the data plane. The actual buffer size
           # is controlled in a layer above.
@@ -353,8 +365,8 @@ class GrpcClientDataChannelFactory(DataChannelFactory):
             grpc_channel = GRPCChannelFactory.secure_channel(
                 url, self._credentials, options=channel_options)
           # Add workerId to the grpc channel
-          grpc_channel = grpc.intercept_channel(grpc_channel,
-                                                WorkerIdInterceptor())
+          grpc_channel = grpc.intercept_channel(
+              grpc_channel, WorkerIdInterceptor(self._worker_id))
           self._data_channel_cache[url] = GrpcClientDataChannel(
               beam_fn_api_pb2_grpc.BeamFnDataStub(grpc_channel))
 

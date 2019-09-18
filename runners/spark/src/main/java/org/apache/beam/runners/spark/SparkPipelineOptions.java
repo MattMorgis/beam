@@ -17,7 +17,10 @@
  */
 package org.apache.beam.runners.spark;
 
+import java.io.File;
 import java.util.List;
+import java.util.stream.Collectors;
+import org.apache.beam.runners.core.construction.PipelineResources;
 import org.apache.beam.sdk.annotations.Experimental;
 import org.apache.beam.sdk.options.ApplicationNameOptions;
 import org.apache.beam.sdk.options.Default;
@@ -25,6 +28,7 @@ import org.apache.beam.sdk.options.DefaultValueFactory;
 import org.apache.beam.sdk.options.Description;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.StreamingOptions;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.MoreObjects;
 
 /**
  * Spark runner {@link PipelineOptions} handles Spark execution-related configurations, such as the
@@ -33,8 +37,10 @@ import org.apache.beam.sdk.options.StreamingOptions;
 public interface SparkPipelineOptions
     extends PipelineOptions, StreamingOptions, ApplicationNameOptions {
 
+  String DEFAULT_MASTER_URL = "local[4]";
+
   @Description("The url of the spark master to connect to, (e.g. spark://host:port, local[4]).")
-  @Default.String("local[4]")
+  @Default.String(DEFAULT_MASTER_URL)
   String getSparkMaster();
 
   void setSparkMaster(String master);
@@ -144,4 +150,26 @@ public interface SparkPipelineOptions
   boolean isCacheDisabled();
 
   void setCacheDisabled(boolean value);
+
+  /**
+   * Classpath contains non jar files (eg. directories with .class files or empty directories) will
+   * cause exception in running log. Though the {@link org.apache.spark.SparkContext} can handle
+   * this when running in local master, it's better not to include non-jars files in classpath.
+   */
+  static void prepareFilesToStage(SparkPipelineOptions options) {
+    List<String> filesToStage =
+        options.getFilesToStage().stream()
+            .map(File::new)
+            .filter(File::exists)
+            .map(
+                file -> {
+                  return file.getAbsolutePath();
+                })
+            .collect(Collectors.toList());
+    options.setFilesToStage(
+        PipelineResources.prepareFilesForStaging(
+            filesToStage,
+            MoreObjects.firstNonNull(
+                options.getTempLocation(), System.getProperty("java.io.tmpdir"))));
+  }
 }

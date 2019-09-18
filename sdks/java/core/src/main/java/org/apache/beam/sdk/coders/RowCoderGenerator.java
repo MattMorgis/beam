@@ -17,6 +17,8 @@
  */
 package org.apache.beam.sdk.coders;
 
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkState;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -25,41 +27,41 @@ import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import net.bytebuddy.ByteBuddy;
-import net.bytebuddy.description.modifier.FieldManifestation;
-import net.bytebuddy.description.modifier.Ownership;
-import net.bytebuddy.description.modifier.Visibility;
-import net.bytebuddy.description.type.TypeDescription;
-import net.bytebuddy.description.type.TypeDescription.ForLoadedType;
-import net.bytebuddy.dynamic.DynamicType;
-import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
-import net.bytebuddy.dynamic.scaffold.InstrumentedType;
-import net.bytebuddy.implementation.FixedValue;
-import net.bytebuddy.implementation.Implementation;
-import net.bytebuddy.implementation.bytecode.ByteCodeAppender;
-import net.bytebuddy.implementation.bytecode.Duplication;
-import net.bytebuddy.implementation.bytecode.StackManipulation;
-import net.bytebuddy.implementation.bytecode.StackManipulation.Compound;
-import net.bytebuddy.implementation.bytecode.TypeCreation;
-import net.bytebuddy.implementation.bytecode.collection.ArrayFactory;
-import net.bytebuddy.implementation.bytecode.member.FieldAccess;
-import net.bytebuddy.implementation.bytecode.member.MethodInvocation;
-import net.bytebuddy.implementation.bytecode.member.MethodReturn;
-import net.bytebuddy.implementation.bytecode.member.MethodVariableAccess;
-import net.bytebuddy.matcher.ElementMatchers;
 import org.apache.beam.sdk.schemas.Schema;
 import org.apache.beam.sdk.schemas.Schema.Field;
 import org.apache.beam.sdk.schemas.Schema.FieldType;
 import org.apache.beam.sdk.schemas.Schema.TypeName;
 import org.apache.beam.sdk.values.Row;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Lists;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Maps;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.ByteBuddy;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.description.modifier.FieldManifestation;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.description.modifier.Ownership;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.description.modifier.Visibility;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.description.type.TypeDescription;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.description.type.TypeDescription.ForLoadedType;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.dynamic.DynamicType;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.dynamic.scaffold.InstrumentedType;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.implementation.FixedValue;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.implementation.Implementation;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.implementation.bytecode.ByteCodeAppender;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.implementation.bytecode.Duplication;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.implementation.bytecode.StackManipulation;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.implementation.bytecode.StackManipulation.Compound;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.implementation.bytecode.TypeCreation;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.implementation.bytecode.collection.ArrayFactory;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.implementation.bytecode.member.FieldAccess;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.implementation.bytecode.member.MethodInvocation;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.implementation.bytecode.member.MethodReturn;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.implementation.bytecode.member.MethodVariableAccess;
+import org.apache.beam.vendor.bytebuddy.v1_9_3.net.bytebuddy.matcher.ElementMatchers;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Lists;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Maps;
 
 /**
  * A utility for automatically generating a {@link Coder} for {@link Row} objects corresponding to a
  * specific schema. The resulting coder is loaded into the default ClassLoader and returned.
  *
- * <p>When {@link RowCoderGenerator#generate(Schema, UUID)} is called, a new subclass of {@literal
+ * <p>When {@link RowCoderGenerator#generate(Schema)} is called, a new subclass of {@literal
  * Coder<Row>} is generated for the specified schema. This class is generated using low-level
  * bytecode generation, and hardcodes encodings for all fields of the Schema. Empirically, this is
  * 30-40% faster than a coder that introspects the schema.
@@ -124,10 +126,10 @@ public abstract class RowCoderGenerator {
   }
 
   @SuppressWarnings("unchecked")
-  public static Coder<Row> generate(Schema schema, UUID coderId) {
+  public static Coder<Row> generate(Schema schema) {
     // Using ConcurrentHashMap::computeIfAbsent here would deadlock in case of nested
     // coders. Using HashMap::computeIfAbsent generates ConcurrentModificationExceptions in Java 11.
-    Coder<Row> rowCoder = generatedCoders.get(coderId);
+    Coder<Row> rowCoder = generatedCoders.get(schema.getUUID());
     if (rowCoder == null) {
       TypeDescription.Generic coderType =
           TypeDescription.Generic.Builder.parameterizedType(Coder.class, Row.class).build();
@@ -149,7 +151,7 @@ public abstract class RowCoderGenerator {
           | InvocationTargetException e) {
         throw new RuntimeException("Unable to generate coder for schema " + schema);
       }
-      generatedCoders.put(coderId, rowCoder);
+      generatedCoders.put(schema.getUUID(), rowCoder);
     }
     return rowCoder;
   }
@@ -220,6 +222,8 @@ public abstract class RowCoderGenerator {
     static void encodeDelegate(
         Coder[] coders, Row value, OutputStream outputStream, boolean hasNullableFields)
         throws IOException {
+      checkState(value.getFieldCount() == value.getSchema().getFieldCount());
+
       // Encode the field count. This allows us to handle compatible schema changes.
       VAR_INT_CODER.encode(value.getFieldCount(), outputStream);
       // Encode a bitmap for the null fields to save having to encode a bunch of nulls.
@@ -294,6 +298,7 @@ public abstract class RowCoderGenerator {
     static Row decodeDelegate(Schema schema, Coder[] coders, InputStream inputStream)
         throws IOException {
       int fieldCount = VAR_INT_CODER.decode(inputStream);
+
       BitSet nullFields = NULL_LIST_CODER.decode(inputStream);
       List<Object> fieldValues = Lists.newArrayListWithCapacity(coders.length);
       for (int i = 0; i < fieldCount; ++i) {
@@ -367,8 +372,8 @@ public abstract class RowCoderGenerator {
     } else if (TypeName.MAP.equals(fieldType.getTypeName())) {
       return mapCoder(fieldType.getMapKeyType(), fieldType.getMapValueType());
     } else if (TypeName.ROW.equals(fieldType.getTypeName())) {
-      Coder<Row> nestedCoder = generate(fieldType.getRowSchema(), UUID.randomUUID());
-      RowCoder.of(fieldType.getRowSchema());
+      checkState(fieldType.getRowSchema().getUUID() != null);
+      Coder<Row> nestedCoder = generate(fieldType.getRowSchema());
       return rowCoder(nestedCoder.getClass());
     } else {
       StackManipulation primitiveCoder = coderForPrimitiveType(fieldType.getTypeName());

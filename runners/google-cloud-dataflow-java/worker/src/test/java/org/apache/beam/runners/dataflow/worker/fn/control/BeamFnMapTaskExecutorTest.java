@@ -60,10 +60,10 @@ import org.apache.beam.sdk.fn.IdGenerators;
 import org.apache.beam.sdk.fn.data.RemoteGrpcPortRead;
 import org.apache.beam.sdk.transforms.windowing.BoundedWindow;
 import org.apache.beam.sdk.util.MoreFutures;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableList;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableTable;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterables;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableList;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableTable;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterables;
 import org.joda.time.Instant;
 import org.junit.Before;
 import org.junit.Test;
@@ -462,8 +462,10 @@ public class BeamFnMapTaskExecutorTest {
     final int expectedCounterValue = 5;
     final MonitoringInfo expectedMonitoringInfo =
         MonitoringInfo.newBuilder()
-            .setUrn("beam:metric:user:ExpectedCounter")
-            .setType("beam:metrics:sum_int_64")
+            .setUrn(MonitoringInfoConstants.Urns.USER_COUNTER)
+            .putLabels(MonitoringInfoConstants.Labels.NAME, "ExpectedCounter")
+            .putLabels(MonitoringInfoConstants.Labels.NAMESPACE, "anyString")
+            .setType(MonitoringInfoConstants.TypeUrns.SUM_INT64)
             .putLabels(MonitoringInfoConstants.Labels.PTRANSFORM, "ExpectedPTransform")
             .setMetric(
                 Metric.newBuilder()

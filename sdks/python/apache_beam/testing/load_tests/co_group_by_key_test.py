@@ -26,7 +26,9 @@ will be stored,
 * metrics_table (optional) - name of BigQuery table where metrics
 will be stored,
 * input_options - options for Synthetic Sources,
-* co_input_options - options for  Synthetic Sources.
+* co_input_options - options for Synthetic Sources,
+* iterations - number of reiterations over per-key-grouped values to perform
+(default: 1).
 
 Example test run on DirectRunner:
 
@@ -36,6 +38,7 @@ python setup.py nosetests \
       --publish_to_big_query=true
       --metrics_dataset=python_load_tests
       --metrics_table=co_gbk
+      --iterations=1
       --input_options='{
         \"num_records\": 1000,
         \"key_size\": 5,
@@ -59,6 +62,7 @@ or:
     --project=...
     --metrics_dataset=python_load_tests
     --metrics_table=co_gbk
+    --iterations=1
     --input_options=\'
       {"num_records": 1,
       "key_size": 1,
@@ -76,7 +80,7 @@ or:
     --runner=DirectRunner' \
 -PloadTest.mainClass=
 apache_beam.testing.load_tests.co_group_by_key_test \
--Prunner=DirectRunner :beam-sdks-python-load-tests:run
+-Prunner=DirectRunner :sdks:python:apache_beam:testing:load-tests:run
 
 To run test on other runner (ex. Dataflow):
 
@@ -90,6 +94,7 @@ python setup.py nosetests \
         --publish_to_big_query=true
         --metrics_dataset=python_load_tests
         --metrics_table=co_gbk
+        --iterations=1
         --input_options='{
         \"num_records\": 1000,
         \"key_size\": 5,
@@ -115,6 +120,7 @@ or:
     --project=...
     --metrics_dataset=python_load_tests
     --metrics_table=co_gbk
+    --iterations=1
     --temp_location=gs://...
     --input_options=\'
       {"num_records": 1,
@@ -133,7 +139,7 @@ or:
     --runner=TestDataflowRunner' \
 -PloadTest.mainClass=
 apache_beam.testing.load_tests.co_group_by_key_test \
--Prunner=TestDataflowRunner :beam-sdks-python-load-tests:run
+-Prunner=TestDataflowRunner :sdks:python:apache_beam:testing:load-tests:run
 """
 
 from __future__ import absolute_import
@@ -162,16 +168,20 @@ class CoGroupByKeyTest(LoadTest):
     super(CoGroupByKeyTest, self).setUp()
     self.co_input_options = json.loads(
         self.pipeline.get_option('co_input_options'))
+    self.iterations = self.get_option_or_default('iterations', 1)
 
-  class _Ungroup(beam.DoFn):
-    def process(self, element):
+  class _UngroupAndReiterate(beam.DoFn):
+    def process(self, element, iterations):
       values = element[1]
       inputs = values.get(INPUT_TAG)
       co_inputs = values.get(CO_INPUT_TAG)
-      for i in inputs:
-        yield i
-      for i in co_inputs:
-        yield i
+      for i in range(iterations):
+        for value in inputs:
+          if i == iterations - 1:
+            yield value
+        for value in co_inputs:
+          if i == iterations - 1:
+            yield value
 
   def testCoGroupByKey(self):
     pc1 = (self.pipeline
@@ -194,8 +204,9 @@ class CoGroupByKeyTest(LoadTest):
           )
     # pylint: disable=expression-not-assigned
     ({INPUT_TAG: pc1, CO_INPUT_TAG: pc2}
-     | 'CoGroupByKey: ' >> beam.CoGroupByKey()
-     | 'Consume Joined Collections' >> beam.ParDo(self._Ungroup())
+     | 'CoGroupByKey ' >> beam.CoGroupByKey()
+     | 'Consume Joined Collections' >> beam.ParDo(self._UngroupAndReiterate(),
+                                                  self.iterations)
      | 'Measure time: End' >> beam.ParDo(MeasureTime(self.metrics_namespace))
     )
 

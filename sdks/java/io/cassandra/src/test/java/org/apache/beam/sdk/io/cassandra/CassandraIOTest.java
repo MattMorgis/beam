@@ -39,10 +39,8 @@ import com.datastax.driver.mapping.annotations.PartitionKey;
 import com.datastax.driver.mapping.annotations.Table;
 import info.archinnov.achilles.embedded.CassandraEmbeddedServerBuilder;
 import info.archinnov.achilles.embedded.CassandraShutDownHook;
-import java.io.IOException;
 import java.io.Serializable;
 import java.math.BigInteger;
-import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -60,6 +58,7 @@ import javax.management.remote.JMXServiceURL;
 import org.apache.beam.sdk.coders.SerializableCoder;
 import org.apache.beam.sdk.io.BoundedSource;
 import org.apache.beam.sdk.io.cassandra.CassandraIO.CassandraSource.TokenRange;
+import org.apache.beam.sdk.io.common.NetworkTestHelper;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.testing.PAssert;
@@ -72,14 +71,15 @@ import org.apache.beam.sdk.transforms.SerializableFunction;
 import org.apache.beam.sdk.transforms.SimpleFunction;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Objects;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.util.concurrent.ListeningExecutorService;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.util.concurrent.MoreExecutors;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Objects;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.util.concurrent.ListeningExecutorService;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.util.concurrent.MoreExecutors;
 import org.apache.cassandra.service.StorageServiceMBean;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -90,6 +90,7 @@ import org.slf4j.LoggerFactory;
 
 /** Tests of {@link CassandraIO}. */
 @RunWith(JUnit4.class)
+@Ignore("Ignore until https://issues.apache.org/jira/browse/BEAM-8025 is resolved")
 public class CassandraIOTest implements Serializable {
   private static final long NUM_ROWS = 20L;
   private static final String CASSANDRA_KEYSPACE = "beam_ks";
@@ -110,8 +111,8 @@ public class CassandraIOTest implements Serializable {
   private static CassandraShutDownHook shutdownHook;
 
   @BeforeClass
-  public static void startCassandra() throws Exception {
-    jmxPort = getFreeLocalPort();
+  public static void beforeClass() throws Exception {
+    jmxPort = NetworkTestHelper.getAvailableLocalPort();
     shutdownHook = new CassandraShutDownHook();
     // randomized port at startup
     String data = TEMPORARY_FOLDER.newFolder("embedded-cassandra", "data").getPath();
@@ -134,6 +135,15 @@ public class CassandraIOTest implements Serializable {
     cassandraPort = cluster.getConfiguration().getProtocolOptions().getPort();
     session = CassandraIOTest.cluster.newSession();
 
+    insertData();
+  }
+
+  @AfterClass
+  public static void afterClass() throws InterruptedException {
+    shutdownHook.shutDownNow();
+  }
+
+  private static void insertData() throws Exception {
     LOGGER.info("Create Cassandra tables");
     session.execute(
         String.format(
@@ -145,22 +155,7 @@ public class CassandraIOTest implements Serializable {
             "CREATE TABLE IF NOT EXISTS %s.%s(person_id int, person_name text, PRIMARY KEY"
                 + "(person_id));",
             CASSANDRA_KEYSPACE, CASSANDRA_TABLE_WRITE));
-    insertRecords();
-  }
 
-  private static int getFreeLocalPort() throws IOException {
-    ServerSocket serverSocket = new ServerSocket(0);
-    int port = serverSocket.getLocalPort();
-    serverSocket.close();
-    return port;
-  }
-
-  @AfterClass
-  public static void stopCassandra() throws InterruptedException {
-    shutdownHook.shutDownNow();
-  }
-
-  private static void insertRecords() throws Exception {
     LOGGER.info("Insert records");
     String[] scientists = {
       "Einstein",

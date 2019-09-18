@@ -27,6 +27,7 @@ needed right now use a @retry.no_retries decorator.
 
 from __future__ import absolute_import
 
+import functools
 import logging
 import random
 import sys
@@ -101,6 +102,15 @@ def retry_on_server_errors_filter(exception):
   if (HttpError is not None) and isinstance(exception, HttpError):
     return exception.status_code >= 500
   return not isinstance(exception, PermanentException)
+
+
+# TODO(BEAM-6202): Dataflow returns 404 for job ids that actually exist.
+# Retry on those errors.
+def retry_on_server_errors_and_notfound_filter(exception):
+  if HttpError is not None and isinstance(exception, HttpError):
+    if exception.status_code == 404:  # 404 Not Found
+      return True
+  return retry_on_server_errors_filter(exception)
 
 
 def retry_on_server_errors_and_timeout_filter(exception):
@@ -185,6 +195,7 @@ def with_exponential_backoff(
 
   def real_decorator(fun):
     """The real decorator whose purpose is to return the wrapped function."""
+    @functools.wraps(fun)
     def wrapper(*args, **kwargs):
       retry_intervals = iter(
           FuzzedExponentialIntervals(

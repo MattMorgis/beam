@@ -37,9 +37,9 @@ import org.apache.beam.runners.dataflow.worker.profiler.ScopedProfiler;
 import org.apache.beam.runners.dataflow.worker.profiler.ScopedProfiler.ProfileScope;
 import org.apache.beam.runners.dataflow.worker.util.common.worker.OperationContext;
 import org.apache.beam.sdk.metrics.MetricsContainer;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.annotations.VisibleForTesting;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableSet;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.annotations.VisibleForTesting;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableSet;
 import org.joda.time.Duration;
 import org.joda.time.format.PeriodFormatter;
 import org.joda.time.format.PeriodFormatterBuilder;
@@ -207,6 +207,19 @@ public class DataflowOperationContext implements OperationContext {
 
     public ProfileScope getProfileScope() {
       return profileScope;
+    }
+
+    @Override
+    public String getDescription() {
+      StringBuilder description = new StringBuilder();
+      description.append(getStepName().stageName());
+      description.append("-");
+      if (getStepName().originalName() != null) {
+        description.append(getStepName().originalName());
+        description.append("-");
+      }
+      description.append(getStateName());
+      return description.toString();
     }
 
     private static final ImmutableSet<String> FRAMEWORK_CLASSES =

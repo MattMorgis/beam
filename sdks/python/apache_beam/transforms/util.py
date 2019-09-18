@@ -24,17 +24,23 @@ from __future__ import division
 import collections
 import contextlib
 import random
+import re
 import time
+import typing
+import warnings
+from builtins import filter
 from builtins import object
 from builtins import range
 from builtins import zip
 
 from future.utils import itervalues
 
+from apache_beam import coders
 from apache_beam import typehints
 from apache_beam.metrics import Metrics
 from apache_beam.portability import common_urns
 from apache_beam.transforms import window
+from apache_beam.transforms.combiners import CountCombineFn
 from apache_beam.transforms.core import CombinePerKey
 from apache_beam.transforms.core import DoFn
 from apache_beam.transforms.core import FlatMap
@@ -45,13 +51,19 @@ from apache_beam.transforms.core import ParDo
 from apache_beam.transforms.core import Windowing
 from apache_beam.transforms.ptransform import PTransform
 from apache_beam.transforms.ptransform import ptransform_fn
+from apache_beam.transforms.timeutil import TimeDomain
 from apache_beam.transforms.trigger import AccumulationMode
 from apache_beam.transforms.trigger import AfterCount
+from apache_beam.transforms.userstate import BagStateSpec
+from apache_beam.transforms.userstate import CombiningValueStateSpec
+from apache_beam.transforms.userstate import TimerSpec
+from apache_beam.transforms.userstate import on_timer
 from apache_beam.transforms.window import NonMergingWindowFn
 from apache_beam.transforms.window import TimestampCombiner
 from apache_beam.transforms.window import TimestampedValue
 from apache_beam.utils import windowed_value
 from apache_beam.utils.annotations import deprecated
+from apache_beam.utils.annotations import experimental
 
 __all__ = [
     'BatchElements',
@@ -59,14 +71,19 @@ __all__ = [
     'Distinct',
     'Keys',
     'KvSwap',
+    'Regex',
+    'Reify',
     'RemoveDuplicates',
     'Reshuffle',
+    'ToString',
     'Values',
+    'WithKeys',
+    'GroupIntoBatches'
     ]
 
-K = typehints.TypeVariable('K')
-V = typehints.TypeVariable('V')
-T = typehints.TypeVariable('T')
+K = typing.TypeVar('K')
+V = typing.TypeVar('V')
+T = typing.TypeVar('T')
 
 
 class CoGroupByKey(PTransform):
@@ -84,16 +101,17 @@ class CoGroupByKey(PTransform):
                     'tag2': ... ,
                     ... })
 
-  For example, given:
+  For example, given::
 
       {'tag1': pc1, 'tag2': pc2, 333: pc3}
 
-  where:
+  where::
+
       pc1 = [(k1, v1)]
       pc2 = []
       pc3 = [(k1, v31), (k1, v32), (k2, v33)]
 
-  The output PCollection would be:
+  The output PCollection would be::
 
       [(k1, {'tag1': [v1], 'tag2': [], 333: [v31, v32]}),
        (k2, {'tag1': [], 'tag2': [], 333: [v33]})]
@@ -466,7 +484,7 @@ class _WindowAwareBatchingDoFn(DoFn):
 
 
 @typehints.with_input_types(T)
-@typehints.with_output_types(typehints.List[T])
+@typehints.with_output_types(typing.List[T])
 class BatchElements(PTransform):
   """A Transform that batches elements for amortized processing.
 
@@ -559,8 +577,8 @@ class _IdentityWindowFn(NonMergingWindowFn):
     return self._window_coder
 
 
-@typehints.with_input_types(typehints.KV[K, V])
-@typehints.with_output_types(typehints.KV[K, V])
+@typehints.with_input_types(typing.Tuple[K, V])
+@typehints.with_output_types(typing.Tuple[K, V])
 class ReshufflePerKey(PTransform):
   """PTransform that returns a PCollection equivalent to its input,
   but operationally provides some of the side effects of a GroupByKey,
@@ -576,7 +594,6 @@ class ReshufflePerKey(PTransform):
       # In this (common) case we can use a trivial trigger driver
       # and avoid the (expensive) window param.
       globally_windowed = window.GlobalWindows.windowed_value(None)
-      window_fn = window.GlobalWindows()
       MIN_TIMESTAMP = window.MIN_TIMESTAMP
 
       def reify_timestamps(element, timestamp=DoFn.TimestampParam):
@@ -594,29 +611,24 @@ class ReshufflePerKey(PTransform):
             for (value, timestamp) in values]
 
     else:
-      # The linter is confused.
-      # hash(1) is used to force "runtime" selection of _IdentityWindowFn
-      # pylint: disable=abstract-class-instantiated
-      cls = hash(1) and _IdentityWindowFn
-      window_fn = cls(
-          windowing_saved.windowfn.get_window_coder())
-
-      def reify_timestamps(element, timestamp=DoFn.TimestampParam):
+      def reify_timestamps(element,
+                           timestamp=DoFn.TimestampParam,
+                           window=DoFn.WindowParam):
         key, value = element
-        return key, TimestampedValue(value, timestamp)
+        # Transport the window as part of the value and restore it later.
+        return key, windowed_value.WindowedValue(value, timestamp, [window])
 
-      def restore_timestamps(element, window=DoFn.WindowParam):
-        # Pass the current window since _IdentityWindowFn wouldn't know how
-        # to generate it.
-        key, values = element
-        return [
-            windowed_value.WindowedValue(
-                (key, value.value), value.timestamp, [window])
-            for value in values]
+      def restore_timestamps(element):
+        key, windowed_values = element
+        return [wv.with_value((key, wv.value)) for wv in windowed_values]
 
     ungrouped = pcoll | Map(reify_timestamps)
+
+    # TODO(BEAM-8104) Using global window as one of the standard window.
+    # This is to mitigate the Dataflow Java Runner Harness limitation to
+    # accept only standard coders.
     ungrouped._windowing = Windowing(
-        window_fn,
+        window.GlobalWindows(),
         triggerfn=AfterCount(1),
         accumulation_mode=AccumulationMode.DISCARDING,
         timestamp_combiner=TimestampCombiner.OUTPUT_AT_EARLIEST)
@@ -653,3 +665,416 @@ class Reshuffle(PTransform):
   @PTransform.register_urn(common_urns.composites.RESHUFFLE.urn, None)
   def from_runner_api_parameter(unused_parameter, unused_context):
     return Reshuffle()
+
+
+@ptransform_fn
+def WithKeys(pcoll, k):
+  """PTransform that takes a PCollection, and either a constant key or a
+  callable, and returns a PCollection of (K, V), where each of the values in
+  the input PCollection has been paired with either the constant key or a key
+  computed from the value.
+  """
+  if callable(k):
+    return pcoll | Map(lambda v: (k(v), v))
+  return pcoll | Map(lambda v: (k, v))
+
+
+@experimental()
+@typehints.with_input_types(typing.Tuple[K, V])
+class GroupIntoBatches(PTransform):
+  """PTransform that batches the input into desired batch size. Elements are
+  buffered until they are equal to batch size provided in the argument at which
+  point they are output to the output Pcollection.
+
+  Windows are preserved (batches will contain elements from the same window)
+
+  GroupIntoBatches is experimental. Its use case will depend on the runner if
+  it has support of States and Timers.
+  """
+
+  def __init__(self, batch_size):
+    """Create a new GroupIntoBatches with batch size.
+
+    Arguments:
+      batch_size: (required) How many elements should be in a batch
+    """
+    warnings.warn('Use of GroupIntoBatches transform requires State/Timer '
+                  'support from the runner')
+    self.batch_size = batch_size
+
+  def expand(self, pcoll):
+    input_coder = coders.registry.get_coder(pcoll)
+    return pcoll | ParDo(_pardo_group_into_batches(
+        self.batch_size, input_coder))
+
+
+def _pardo_group_into_batches(batch_size, input_coder):
+  ELEMENT_STATE = BagStateSpec('values', input_coder)
+  COUNT_STATE = CombiningValueStateSpec('count', input_coder, CountCombineFn())
+  EXPIRY_TIMER = TimerSpec('expiry', TimeDomain.WATERMARK)
+
+  class _GroupIntoBatchesDoFn(DoFn):
+
+    def process(self, element,
+                window=DoFn.WindowParam,
+                element_state=DoFn.StateParam(ELEMENT_STATE),
+                count_state=DoFn.StateParam(COUNT_STATE),
+                expiry_timer=DoFn.TimerParam(EXPIRY_TIMER)):
+      # Allowed lateness not supported in Python SDK
+      # https://beam.apache.org/documentation/programming-guide/#watermarks-and-late-data
+      expiry_timer.set(window.end)
+      element_state.add(element)
+      count_state.add(1)
+      count = count_state.read()
+      if count >= batch_size:
+        batch = [element for element in element_state.read()]
+        yield batch
+        element_state.clear()
+        count_state.clear()
+
+    @on_timer(EXPIRY_TIMER)
+    def expiry(self, element_state=DoFn.StateParam(ELEMENT_STATE),
+               count_state=DoFn.StateParam(COUNT_STATE)):
+      batch = [element for element in element_state.read()]
+      if batch:
+        yield batch
+        element_state.clear()
+        count_state.clear()
+
+  return _GroupIntoBatchesDoFn()
+
+
+class ToString(object):
+  """
+  PTransform for converting a PCollection element, KV or PCollection Iterable
+  to string.
+  """
+
+  class Kvs(PTransform):
+    """
+    Transforms each element of the PCollection to a string on the key followed
+    by the specific delimiter and the value.
+    """
+
+    def __init__(self, delimiter=None):
+      self.delimiter = delimiter or ","
+
+    def expand(self, pcoll):
+      input_type = typing.Tuple[typing.Any, typing.Any]
+      output_type = str
+      return (pcoll | ('%s:KeyVaueToString' % self.label >> (Map(
+          lambda x: "{}{}{}".format(x[0], self.delimiter, x[1])))
+                       .with_input_types(input_type)
+                       .with_output_types(output_type)))
+
+  class Element(PTransform):
+    """
+    Transforms each element of the PCollection to a string.
+    """
+
+    def expand(self, pcoll):
+      input_type = T
+      output_type = str
+      return (pcoll | ('%s:ElementToString' % self.label >> (Map(
+          lambda x: str(x)))
+                       .with_input_types(input_type)
+                       .with_output_types(output_type)))
+
+  class Iterables(PTransform):
+    """
+    Transforms each item in the iterable of the input of PCollection to a
+    string. There is no trailing delimiter.
+    """
+
+    def __init__(self, delimiter=None):
+      self.delimiter = delimiter or ","
+
+    def expand(self, pcoll):
+      input_type = typing.Iterable[typing.Any]
+      output_type = str
+      return (pcoll | ('%s:IterablesToString' % self.label >> (
+          Map(lambda x: self.delimiter.join(str(_x) for _x in x)))
+                       .with_input_types(input_type)
+                       .with_output_types(output_type)))
+
+
+class Reify(object):
+  """PTransforms for converting between explicit and implicit form of various
+  Beam values."""
+
+  @typehints.with_input_types(T)
+  @typehints.with_output_types(T)
+  class Timestamp(PTransform):
+    """PTransform to wrap a value in a TimestampedValue with it's
+    associated timestamp."""
+
+    @staticmethod
+    def add_timestamp_info(element, timestamp=DoFn.TimestampParam):
+      yield TimestampedValue(element, timestamp)
+
+    def expand(self, pcoll):
+      return pcoll | ParDo(self.add_timestamp_info)
+
+  @typehints.with_input_types(T)
+  @typehints.with_output_types(T)
+  class Window(PTransform):
+    """PTransform to convert an element in a PCollection into a tuple of
+    (element, timestamp, window), wrapped in a TimestampedValue with it's
+    associated timestamp."""
+
+    @staticmethod
+    def add_window_info(element, timestamp=DoFn.TimestampParam,
+                        window=DoFn.WindowParam):
+      yield TimestampedValue((element, timestamp, window), timestamp)
+
+    def expand(self, pcoll):
+      return pcoll | ParDo(self.add_window_info)
+
+  @typehints.with_input_types(typing.Tuple[K, V])
+  @typehints.with_output_types(typing.Tuple[K, V])
+  class TimestampInValue(PTransform):
+    """PTransform to wrap the Value in a KV pair in a TimestampedValue with
+    the element's associated timestamp."""
+
+    @staticmethod
+    def add_timestamp_info(element, timestamp=DoFn.TimestampParam):
+      key, value = element
+      yield (key, TimestampedValue(value, timestamp))
+
+    def expand(self, pcoll):
+      return pcoll | ParDo(self.add_timestamp_info)
+
+  @typehints.with_input_types(typing.Tuple[K, V])
+  @typehints.with_output_types(typing.Tuple[K, V])
+  class WindowInValue(PTransform):
+    """PTransform to convert the Value in a KV pair into a tuple of
+    (value, timestamp, window), with the whole element being wrapped inside a
+    TimestampedValue."""
+
+    @staticmethod
+    def add_window_info(element, timestamp=DoFn.TimestampParam,
+                        window=DoFn.WindowParam):
+      key, value = element
+      yield TimestampedValue((key, (value, timestamp, window)), timestamp)
+
+    def expand(self, pcoll):
+      return pcoll | ParDo(self.add_window_info)
+
+
+class Regex(object):
+  """
+  PTransform  to use Regular Expression to process the elements in a
+  PCollection.
+  """
+
+  ALL = "__regex_all_groups"
+
+  @staticmethod
+  def _regex_compile(regex):
+    """Return re.compile if the regex has a string value"""
+    if isinstance(regex, str):
+      regex = re.compile(regex)
+    return regex
+
+  @staticmethod
+  @typehints.with_input_types(str)
+  @typehints.with_output_types(str)
+  @ptransform_fn
+  def matches(pcoll, regex, group=0):
+    """
+    Returns the matches (group 0 by default) if zero or more characters at the
+    beginning of string match the regular expression. To match the entire
+    string, add "$" sign at the end of regex expression.
+
+    Group can be integer value or a string value.
+
+    Args:
+      regex: the regular expression string or (re.compile) pattern.
+      group: (optional) name/number of the group, it can be integer or a string
+        value. Defaults to 0, meaning the entire matched string will be
+        returned.
+    """
+    regex = Regex._regex_compile(regex)
+
+    def _process(element):
+      m = regex.match(element)
+      if m:
+        yield m.group(group)
+    return pcoll | FlatMap(_process)
+
+  @staticmethod
+  @typehints.with_input_types(str)
+  @typehints.with_output_types(typing.List[str])
+  @ptransform_fn
+  def all_matches(pcoll, regex):
+    """
+    Returns all matches (groups) if zero or more characters at the beginning
+    of string match the regular expression.
+
+    Args:
+      regex: the regular expression string or (re.compile) pattern.
+    """
+    regex = Regex._regex_compile(regex)
+
+    def _process(element):
+      m = regex.match(element)
+      if m:
+        yield [m.group(ix) for ix in range(m.lastindex + 1)]
+
+    return pcoll | FlatMap(_process)
+
+  @staticmethod
+  @typehints.with_input_types(str)
+  @typehints.with_output_types(typing.Tuple[str, str])
+  @ptransform_fn
+  def matches_kv(pcoll, regex, keyGroup, valueGroup=0):
+    """
+    Returns the KV pairs if the string matches the regular expression, deriving
+    the key & value from the specified group of the regular expression.
+
+    Args:
+      regex: the regular expression string or (re.compile) pattern.
+      keyGroup: The Regex group to use as the key. Can be int or str.
+      valueGroup: (optional) Regex group to use the value. Can be int or str.
+        The default value "0" returns entire matched string.
+    """
+    regex = Regex._regex_compile(regex)
+
+    def _process(element):
+      match = regex.match(element)
+      if match:
+        yield (match.group(keyGroup), match.group(valueGroup))
+    return pcoll | FlatMap(_process)
+
+  @staticmethod
+  @typehints.with_input_types(str)
+  @typehints.with_output_types(str)
+  @ptransform_fn
+  def find(pcoll, regex, group=0):
+    """
+    Returns the matches if a portion of the line matches the Regex. Returns
+    the entire group (group 0 by default). Group can be integer value or a
+    string value.
+
+    Args:
+      regex: the regular expression string or (re.compile) pattern.
+      group: (optional) name of the group, it can be integer or a string value.
+    """
+    regex = Regex._regex_compile(regex)
+
+    def _process(element):
+      r = regex.search(element)
+      if r:
+        yield r.group(group)
+    return pcoll | FlatMap(_process)
+
+  @staticmethod
+  @typehints.with_input_types(str)
+  @typehints.with_output_types(typing.Union[typing.List[str],
+                                            typing.Tuple[str, str]])
+  @ptransform_fn
+  def find_all(pcoll, regex, group=0, outputEmpty=True):
+    """
+    Returns the matches if a portion of the line matches the Regex. By default,
+    list of group 0 will return with empty items. To get all groups, pass the
+    `Regex.ALL` flag in the `group` parameter which returns all the groups in
+    the tuple format.
+
+    Args:
+      regex: the regular expression string or (re.compile) pattern.
+      group: (optional) name of the group, it can be integer or a string value.
+      outputEmpty: (optional) Should empty be output. True to output empties
+        and false if not.
+    """
+    regex = Regex._regex_compile(regex)
+
+    def _process(element):
+      matches = regex.finditer(element)
+      if group == Regex.ALL:
+        yield [(m.group(), m.groups()[0]) for m in matches if outputEmpty
+               or m.groups()[0]]
+      else:
+        yield [m.group(group) for m in matches if outputEmpty or m.group(group)]
+    return pcoll | FlatMap(_process)
+
+  @staticmethod
+  @typehints.with_input_types(str)
+  @typehints.with_output_types(typing.Tuple[str, str])
+  @ptransform_fn
+  def find_kv(pcoll, regex, keyGroup, valueGroup=0):
+    """
+    Returns the matches if a portion of the line matches the Regex. Returns the
+    specified groups as the key and value pair.
+
+    Args:
+      regex: the regular expression string or (re.compile) pattern.
+      keyGroup: The Regex group to use as the key. Can be int or str.
+      valueGroup: (optional) Regex group to use the value. Can be int or str.
+        The default value "0" returns entire matched string.
+    """
+    regex = Regex._regex_compile(regex)
+
+    def _process(element):
+      matches = regex.finditer(element)
+      if matches:
+        for match in matches:
+          yield (match.group(keyGroup), match.group(valueGroup))
+
+    return pcoll | FlatMap(_process)
+
+  @staticmethod
+  @typehints.with_input_types(str)
+  @typehints.with_output_types(str)
+  @ptransform_fn
+  def replace_all(pcoll, regex, replacement):
+    """
+    Returns the matches if a portion of the line  matches the regex and
+    replaces all matches with the replacement string.
+
+    Args:
+      regex: the regular expression string or (re.compile) pattern.
+      replacement: the string to be substituted for each match.
+    """
+    regex = Regex._regex_compile(regex)
+    return pcoll | Map(lambda elem: regex.sub(replacement, elem))
+
+  @staticmethod
+  @typehints.with_input_types(str)
+  @typehints.with_output_types(str)
+  @ptransform_fn
+  def replace_first(pcoll, regex, replacement):
+    """
+    Returns the matches if a portion of the line matches the regex and replaces
+    the first match with the replacement string.
+
+    Args:
+      regex: the regular expression string or (re.compile) pattern.
+      replacement: the string to be substituted for each match.
+    """
+    regex = Regex._regex_compile(regex)
+    return pcoll | Map(lambda elem: regex.sub(replacement, elem, 1))
+
+  @staticmethod
+  @typehints.with_input_types(str)
+  @typehints.with_output_types(typing.List[str])
+  @ptransform_fn
+  def split(pcoll, regex, outputEmpty=False):
+    """
+    Returns the list string which was splitted on the basis of regular
+    expression. It will not output empty items (by defaults).
+
+    Args:
+      regex: the regular expression string or (re.compile) pattern.
+      outputEmpty: (optional) Should empty be output. True to output empties
+          and false if not.
+    """
+    regex = Regex._regex_compile(regex)
+    outputEmpty = bool(outputEmpty)
+
+    def _process(element):
+      r = regex.split(element)
+      if r and not outputEmpty:
+        r = list(filter(None, r))
+      yield r
+
+    return pcoll | FlatMap(_process)

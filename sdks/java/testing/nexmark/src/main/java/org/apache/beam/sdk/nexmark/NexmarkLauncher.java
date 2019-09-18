@@ -18,8 +18,8 @@
 package org.apache.beam.sdk.nexmark;
 
 import static org.apache.beam.sdk.nexmark.NexmarkUtils.PubSubMode.COMBINED;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkArgument;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkState;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkState;
 
 import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableRow;
@@ -81,7 +81,6 @@ import org.apache.beam.sdk.nexmark.queries.sql.SqlQuery0;
 import org.apache.beam.sdk.nexmark.queries.sql.SqlQuery1;
 import org.apache.beam.sdk.nexmark.queries.sql.SqlQuery2;
 import org.apache.beam.sdk.nexmark.queries.sql.SqlQuery3;
-import org.apache.beam.sdk.nexmark.queries.sql.SqlQuery5;
 import org.apache.beam.sdk.nexmark.queries.sql.SqlQuery7;
 import org.apache.beam.sdk.testing.PAssert;
 import org.apache.beam.sdk.testutils.metrics.MetricsReader;
@@ -94,10 +93,10 @@ import org.apache.beam.sdk.values.PCollectionTuple;
 import org.apache.beam.sdk.values.TimestampedValue;
 import org.apache.beam.sdk.values.TupleTag;
 import org.apache.beam.sdk.values.TupleTagList;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Strings;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableList;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Lists;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Strings;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableList;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Lists;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.LongDeserializer;
@@ -500,6 +499,7 @@ public class NexmarkLauncher<OptionT extends NexmarkOptions> {
       boolean running = true;
       switch (state) {
         case UNKNOWN:
+        case UNRECOGNIZED:
         case STOPPED:
         case RUNNING:
           // Keep going.
@@ -1241,9 +1241,19 @@ public class NexmarkLauncher<OptionT extends NexmarkOptions> {
         .put(
             NexmarkQueryName.LOCAL_ITEM_SUGGESTION,
             new NexmarkQuery(configuration, new SqlQuery3(configuration)))
-        .put(
-            NexmarkQueryName.HOT_ITEMS,
-            new NexmarkQuery(configuration, new SqlQuery5(configuration)))
+
+        // SqlQuery5 is disabled for now, uses non-equi-joins,
+        // never worked right, was giving incorrect results.
+        // Gets rejected after PR/8301, causing failures.
+        //
+        // See:
+        //   https://issues.apache.org/jira/browse/BEAM-7072
+        //   https://github.com/apache/beam/pull/8301
+        //   https://github.com/apache/beam/pull/8422#issuecomment-487676350
+        //
+        //        .put(
+        //            NexmarkQueryName.HOT_ITEMS,
+        //            new NexmarkQuery(configuration, new SqlQuery5(configuration)))
         .put(
             NexmarkQueryName.HIGHEST_BID,
             new NexmarkQuery(configuration, new SqlQuery7(configuration)))

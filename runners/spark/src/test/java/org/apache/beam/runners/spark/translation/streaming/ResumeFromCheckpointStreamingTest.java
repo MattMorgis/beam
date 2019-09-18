@@ -69,10 +69,10 @@ import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.PDone;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Optional;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableList;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.util.concurrent.Uninterruptibles;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Optional;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableList;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.util.concurrent.Uninterruptibles;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.Serializer;
@@ -260,7 +260,7 @@ public class ResumeFromCheckpointStreamingTest implements Serializable {
             .withTopics(Collections.singletonList(TOPIC))
             .withKeyDeserializer(StringDeserializer.class)
             .withValueDeserializer(InstantDeserializer.class)
-            .updateConsumerProperties(ImmutableMap.of("auto.offset.reset", "earliest"))
+            .withConsumerConfigUpdates(ImmutableMap.of("auto.offset.reset", "earliest"))
             .withTimestampFn(KV::getValue)
             .withWatermarkFn(
                 kv -> {

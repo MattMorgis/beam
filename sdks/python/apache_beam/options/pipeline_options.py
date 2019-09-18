@@ -20,6 +20,7 @@
 from __future__ import absolute_import
 
 import argparse
+import json
 import logging
 from builtins import list
 from builtins import object
@@ -405,6 +406,11 @@ class DirectOptions(PipelineOptions):
         default=0,
         help='replay every bundle this many extra times, for profiling'
         'and debugging')
+    parser.add_argument(
+        '--direct_num_workers',
+        type=int,
+        default=1,
+        help='number of parallel running workers.')
 
 
 class GoogleCloudOptions(PipelineOptions):
@@ -442,13 +448,12 @@ class GoogleCloudOptions(PipelineOptions):
     parser.add_argument('--temp_location',
                         default=None,
                         help='GCS path for saving temporary workflow jobs.')
-    # The Cloud Dataflow service does not yet honor this setting. However, once
-    # service support is added then users of this SDK will be able to control
-    # the region. Default is up to the Dataflow service. See
+    # The Google Compute Engine region for creating Dataflow jobs. See
     # https://cloud.google.com/compute/docs/regions-zones/regions-zones for a
-    # list of valid options/
+    # list of valid options. Currently defaults to us-central1, but future
+    # releases of Beam will require the user to set the region explicitly.
     parser.add_argument('--region',
-                        default='us-central1',
+                        default=None,
                         help='The Google Compute Engine region for creating '
                         'Dataflow job.')
     parser.add_argument('--service_account_email',
@@ -471,7 +476,16 @@ class GoogleCloudOptions(PipelineOptions):
                         action='store_true',
                         help='Update an existing streaming Cloud Dataflow job. '
                         'Experimental. '
-                        'See https://cloud.google.com/dataflow/pipelines/'
+                        'See https://cloud.google.com/dataflow/docs/guides/'
+                        'updating-a-pipeline')
+    parser.add_argument('--transform_name_mapping',
+                        default=None,
+                        type=json.loads,
+                        help='The transform mapping that maps the named '
+                        'transforms in your prior pipeline code to names '
+                        'in your replacement pipeline code.'
+                        'Experimental. '
+                        'See https://cloud.google.com/dataflow/docs/guides/'
                         'updating-a-pipeline')
     parser.add_argument('--enable_streaming_engine',
                         default=False,
@@ -499,6 +513,15 @@ class GoogleCloudOptions(PipelineOptions):
       if self.view_as(GoogleCloudOptions).template_location:
         errors.append('--dataflow_job_file and --template_location '
                       'are mutually exclusive.')
+
+    if self.view_as(GoogleCloudOptions).region is None:
+      self.view_as(GoogleCloudOptions).region = 'us-central1'
+      runner = self.view_as(StandardOptions).runner
+      if runner == 'DataflowRunner' or runner == 'TestDataflowRunner':
+        logging.warning(
+            '--region not set; will default to us-central1. Future releases of '
+            'Beam will require the user to set the region explicitly. '
+            'https://cloud.google.com/compute/docs/regions-zones/regions-zones')
 
     return errors
 
@@ -558,7 +581,7 @@ class WorkerOptions(PipelineOptions):
         help=
         ('If and how to autoscale the workerpool.'))
     parser.add_argument(
-        '--worker_machine_type',
+        '--worker_machine_type', '--machine_type',
         dest='machine_type',
         default=None,
         help=('Machine type to create Dataflow worker VMs as. See '
@@ -574,7 +597,7 @@ class WorkerOptions(PipelineOptions):
         ('Remote worker disk size, in gigabytes, or 0 to use the default size. '
          'If not set, the Dataflow service will use a reasonable default.'))
     parser.add_argument(
-        '--worker_disk_type',
+        '--worker_disk_type', '--disk_type',
         dest='disk_type',
         default=None,
         help=('Specifies what type of persistent disk should be used.'))
@@ -780,7 +803,9 @@ class SetupOptions(PipelineOptions):
 
 
 class PortableOptions(PipelineOptions):
-
+  """Portable options are common options expected to be understood by most of
+  the portable runners.
+  """
   @classmethod
   def _add_argparse_args(cls, parser):
     parser.add_argument('--job_endpoint',
@@ -801,28 +826,15 @@ class PortableOptions(PipelineOptions):
               '"<ENV_VAL>"} }. All fields in the json are optional except '
               'command.'))
     parser.add_argument(
-        '--sdk_worker_parallelism', default=None,
+        '--sdk_worker_parallelism', default=0,
         help=('Sets the number of sdk worker processes that will run on each '
-              'worker node. Default is 1. If 0, it will be automatically set '
+              'worker node. Default is 0. If 0, it will be automatically set '
               'by the runner by looking at different parameters (e.g. number '
-              'of CPU cores on the worker machine).'))
+              'of CPU cores on the worker machine or configuration).'))
     parser.add_argument(
         '--environment_cache_millis', default=0,
         help=('Duration in milliseconds for environment cache within a job. '
               '0 means no caching.'))
-
-
-class RunnerOptions(PipelineOptions):
-  """Runner options are provided by the job service.
-
-  The SDK has no a priori knowledge of runner options.
-  It should be able to work with any portable runner.
-  Runner specific options are discovered from the job service endpoint.
-  """
-  @classmethod
-  def _add_argparse_args(cls, parser):
-    # TODO: help option to display discovered options
-    pass
 
 
 class TestOptions(PipelineOptions):

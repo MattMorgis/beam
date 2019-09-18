@@ -17,9 +17,9 @@
  */
 package org.apache.beam.fn.harness;
 
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkArgument;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkNotNull;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkState;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkState;
 
 import com.google.auto.service.AutoService;
 import java.io.IOException;
@@ -44,6 +44,7 @@ import org.apache.beam.sdk.transforms.DoFn.MultiOutputReceiver;
 import org.apache.beam.sdk.transforms.DoFn.OutputReceiver;
 import org.apache.beam.sdk.transforms.DoFnOutputReceivers;
 import org.apache.beam.sdk.transforms.DoFnSchemaInformation;
+import org.apache.beam.sdk.transforms.SerializableFunction;
 import org.apache.beam.sdk.transforms.reflect.DoFnInvoker;
 import org.apache.beam.sdk.transforms.reflect.DoFnInvokers;
 import org.apache.beam.sdk.transforms.reflect.DoFnSignature.StateDeclaration;
@@ -58,8 +59,8 @@ import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.Row;
 import org.apache.beam.sdk.values.TupleTag;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.MoreObjects;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.MoreObjects;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
 import org.joda.time.DateTimeUtils;
 import org.joda.time.Duration;
 import org.joda.time.Instant;
@@ -114,12 +115,16 @@ public class FnApiDoFnRunner<InputT, OutputT>
 
   private DoFnSchemaInformation doFnSchemaInformation;
 
+  private Map<String, PCollectionView<?>> sideInputMapping;
+
   FnApiDoFnRunner(Context<InputT, OutputT> context) {
     this.context = context;
 
     this.mainOutputConsumers =
         (Collection<FnDataReceiver<WindowedValue<OutputT>>>)
             (Collection) context.localNameToConsumer.get(context.mainOutputTag.getId());
+    this.doFnSchemaInformation = ParDoTranslation.getSchemaInformation(context.parDoPayload);
+    this.sideInputMapping = ParDoTranslation.getSideInputMapping(context.parDoPayload);
     this.doFnInvoker = DoFnInvokers.invokerFor(context.doFn);
     this.doFnInvoker.invokeSetup();
 
@@ -157,7 +162,6 @@ public class FnApiDoFnRunner<InputT, OutputT>
             outputTo(consumers, WindowedValue.of(output, timestamp, window, PaneInfo.NO_FIRING));
           }
         };
-    this.doFnSchemaInformation = ParDoTranslation.getSchemaInformation(context.parDoPayload);
   }
 
   @Override
@@ -396,9 +400,14 @@ public class FnApiDoFnRunner<InputT, OutputT>
     }
 
     @Override
-    public Object schemaElement(DoFn<InputT, OutputT> doFn) {
-      Row row = context.schemaCoder.getToRowFunction().apply(element());
-      return doFnSchemaInformation.getElementParameterSchema().getFromRowFunction().apply(row);
+    public Object sideInput(String tagId) {
+      return sideInput(sideInputMapping.get(tagId));
+    }
+
+    @Override
+    public Object schemaElement(int index) {
+      SerializableFunction converter = doFnSchemaInformation.getElementConverters().get(index);
+      return converter.apply(element());
     }
 
     @Override
@@ -580,7 +589,12 @@ public class FnApiDoFnRunner<InputT, OutputT>
     }
 
     @Override
-    public Object schemaElement(DoFn<InputT, OutputT> doFn) {
+    public InputT sideInput(String tagId) {
+      throw new UnsupportedOperationException("SideInput parameters are not supported.");
+    }
+
+    @Override
+    public Object schemaElement(int index) {
       throw new UnsupportedOperationException("Element parameters are not supported.");
     }
 

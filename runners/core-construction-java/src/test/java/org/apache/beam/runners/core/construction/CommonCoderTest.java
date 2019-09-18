@@ -18,8 +18,8 @@
 package org.apache.beam.runners.core.construction;
 
 import static org.apache.beam.runners.core.construction.BeamUrns.getUrn;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.MoreObjects.firstNonNull;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.MoreObjects.firstNonNull;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkNotNull;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.instanceOf;
@@ -54,6 +54,7 @@ import org.apache.beam.sdk.coders.CoderException;
 import org.apache.beam.sdk.coders.DoubleCoder;
 import org.apache.beam.sdk.coders.IterableCoder;
 import org.apache.beam.sdk.coders.KvCoder;
+import org.apache.beam.sdk.coders.StringUtf8Coder;
 import org.apache.beam.sdk.coders.VarLongCoder;
 import org.apache.beam.sdk.transforms.windowing.BoundedWindow;
 import org.apache.beam.sdk.transforms.windowing.GlobalWindow;
@@ -63,11 +64,11 @@ import org.apache.beam.sdk.transforms.windowing.PaneInfo;
 import org.apache.beam.sdk.util.CoderUtils;
 import org.apache.beam.sdk.util.WindowedValue;
 import org.apache.beam.sdk.values.KV;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.MoreObjects;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Splitter;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableList;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.io.CharStreams;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.MoreObjects;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Splitter;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableList;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.io.CharStreams;
 import org.joda.time.Duration;
 import org.joda.time.Instant;
 import org.junit.Test;
@@ -85,6 +86,7 @@ public class CommonCoderTest {
   private static final Map<String, Class<?>> coders =
       ImmutableMap.<String, Class<?>>builder()
           .put(getUrn(StandardCoders.Enum.BYTES), ByteCoder.class)
+          .put(getUrn(StandardCoders.Enum.STRING_UTF8), StringUtf8Coder.class)
           .put(getUrn(StandardCoders.Enum.KV), KvCoder.class)
           .put(getUrn(StandardCoders.Enum.VARINT), VarLongCoder.class)
           .put(getUrn(StandardCoders.Enum.INTERVAL_WINDOW), IntervalWindowCoder.class)
@@ -220,6 +222,8 @@ public class CommonCoderTest {
     String s = coderSpec.getUrn();
     if (s.equals(getUrn(StandardCoders.Enum.BYTES))) {
       return ((String) value).getBytes(StandardCharsets.ISO_8859_1);
+    } else if (s.equals(getUrn(StandardCoders.Enum.STRING_UTF8))) {
+      return value;
     } else if (s.equals(getUrn(StandardCoders.Enum.KV))) {
       Coder keyCoder = ((KvCoder) coder).getKeyCoder();
       Coder valueCoder = ((KvCoder) coder).getValueCoder();
@@ -287,6 +291,8 @@ public class CommonCoderTest {
     String s = coder.getUrn();
     if (s.equals(getUrn(StandardCoders.Enum.BYTES))) {
       return ByteArrayCoder.of();
+    } else if (s.equals(getUrn(StandardCoders.Enum.STRING_UTF8))) {
+      return StringUtf8Coder.of();
     } else if (s.equals(getUrn(StandardCoders.Enum.KV))) {
       return KvCoder.of(components.get(0), components.get(1));
     } else if (s.equals(getUrn(StandardCoders.Enum.VARINT))) {
@@ -328,7 +334,8 @@ public class CommonCoderTest {
     String s = coder.getUrn();
     if (s.equals(getUrn(StandardCoders.Enum.BYTES))) {
       assertThat(expectedValue, equalTo(actualValue));
-
+    } else if (s.equals(getUrn(StandardCoders.Enum.STRING_UTF8))) {
+      assertEquals(expectedValue, actualValue);
     } else if (s.equals(getUrn(StandardCoders.Enum.KV))) {
       assertThat(actualValue, instanceOf(KV.class));
       verifyDecodedValue(

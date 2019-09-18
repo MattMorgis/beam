@@ -20,7 +20,7 @@ package org.apache.beam.sdk.io.kafka;
 import java.util.Arrays;
 import javax.annotation.Nullable;
 import org.apache.beam.sdk.values.KV;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Objects;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Objects;
 import org.apache.kafka.common.header.Headers;
 
 /**
@@ -82,7 +82,7 @@ public class KafkaRecord<K, V> {
   }
 
   public Headers getHeaders() {
-    if (!ConsumerSpEL.hasHeaders) {
+    if (!ConsumerSpEL.hasHeaders()) {
       throw new RuntimeException(
           "The version kafka-clients does not support record headers, "
               + "please use version 0.11.0.0 or newer");

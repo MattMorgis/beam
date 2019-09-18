@@ -19,7 +19,6 @@ from __future__ import absolute_import
 import json
 import logging
 import os
-import platform
 import shutil
 import sys
 import tempfile
@@ -46,16 +45,17 @@ from apache_beam.testing.util import equal_to
 from apache_beam.transforms.display import DisplayData
 from apache_beam.transforms.display_test import DisplayDataItemMatcher
 
-if not (platform.system() == 'Windows' and sys.version_info[0] == 2):
+try:
   import pyarrow as pa
   import pyarrow.lib as pl
   import pyarrow.parquet as pq
+except ImportError:
+  pa = None
+  pl = None
+  pq = None
 
 
-@unittest.skipIf(
-    platform.system() == 'Windows' and sys.version_info[0] == 2,
-    "pyarrow doesn't support Windows Python 2."
-)
+@unittest.skipIf(pa is None, "PyArrow is not installed.")
 class TestParquet(unittest.TestCase):
 
   @classmethod
@@ -353,7 +353,7 @@ class TestParquet(unittest.TestCase):
     splits = [
         split for split in source.split(desired_bundle_size=1)
     ]
-    self.assertEquals(len(splits), 1)
+    self.assertEqual(len(splits), 1)
 
     source = _create_parquet_source(file_name, min_bundle_size=0)
     splits = [
@@ -396,13 +396,13 @@ class TestParquet(unittest.TestCase):
 
     # When reading records of the first group, range_tracker.split_points()
     # should return (0, iobase.RangeTracker.SPLIT_POINTS_UNKNOWN)
-    self.assertEquals(
+    self.assertEqual(
         split_points_report[:10],
         [(0, RangeTracker.SPLIT_POINTS_UNKNOWN)] * 10)
 
     # When reading records of last group, range_tracker.split_points() should
     # return (3, 1)
-    self.assertEquals(split_points_report[-10:], [(3, 1)] * 10)
+    self.assertEqual(split_points_report[-10:], [(3, 1)] * 10)
 
   def test_selective_columns(self):
     file_name = self._write_data()
