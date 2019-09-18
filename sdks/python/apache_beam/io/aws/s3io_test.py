@@ -81,8 +81,8 @@ class TestS3IO(unittest.TestCase):
 
   def test_file_mode(self):
     file_name = 's3://random-data-sets/jerry/pigpen/phil'
-    # with self.aws.open(file_name, 'w') as f:
-    #   assert f.mode == 'w'
+    with self.aws.open(file_name, 'w') as f:
+      assert f.mode == 'w'
     with self.aws.open(file_name, 'r') as f:
       assert f.mode == 'r'
 
@@ -96,6 +96,20 @@ class TestS3IO(unittest.TestCase):
     self.assertEqual(f.read(), b'')
     f.seek(0)
     self.assertEqual(f.read(), 'phil\n')
+
+  def test_file_write(self):
+    file_name = 's3://random-data-sets/_write_file'
+    file_size = 5 * 1024 * 1024 + 2000
+    contents = os.urandom(file_size)
+    f = self.aws.open(file_name, 'w')
+    self.assertEqual(f.mode, 'w')
+    f.write(contents[0:1000])
+    f.write(contents[1000:1024 * 1024])
+    f.write(contents[1024 * 1024:])
+    f.close()
+    bucket, name = s3io.parse_s3_path(file_name)
+    self.assertEqual(
+        self.client.objects.get_file(bucket, name).contents, contents)
 
   # def test_list_prefix(self):
   #   bucket_name = 's3-tests'
