@@ -17,7 +17,7 @@
  */
 package org.apache.beam.sdk.io.redis;
 
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkArgument;
 
 import com.google.auto.value.AutoValue;
 import java.util.List;
@@ -41,8 +41,8 @@ import org.apache.beam.sdk.values.PBegin;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.PDone;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ArrayListMultimap;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Multimap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ArrayListMultimap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Multimap;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Pipeline;
 import redis.clients.jedis.ScanParams;
@@ -450,7 +450,13 @@ public class RedisIO {
       SADD,
 
       /** Use PFADD command. Insert value in a HLL structure. Create key if it doesn't exist */
-      PFADD
+      PFADD,
+
+      /** Use INCBY command. Increment counter value of a key by a given value. */
+      INCRBY,
+
+      /** Use DECRBY command. Decrement counter value of a key by given value. */
+      DECRBY,
     }
 
     @Nullable
@@ -578,6 +584,10 @@ public class RedisIO {
           writeUsingSaddCommand(record, expireTime);
         } else if (Method.PFADD == method) {
           writeUsingHLLCommand(record, expireTime);
+        } else if (Method.INCRBY == method) {
+          writeUsingIncrBy(record);
+        } else if (Method.DECRBY == method) {
+          writeUsingDecrBy(record);
         }
       }
 
@@ -628,6 +638,20 @@ public class RedisIO {
         String value = record.getValue();
 
         pipeline.pfadd(key, value);
+      }
+
+      private void writeUsingIncrBy(KV<String, String> record) {
+        String key = record.getKey();
+        String value = record.getValue();
+        long inc = Long.parseLong(value);
+        pipeline.incrBy(key, inc);
+      }
+
+      private void writeUsingDecrBy(KV<String, String> record) {
+        String key = record.getKey();
+        String value = record.getValue();
+        long decr = Long.parseLong(value);
+        pipeline.decrBy(key, decr);
       }
 
       private void setExpireTimeWhenRequired(String key, Long expireTime) {

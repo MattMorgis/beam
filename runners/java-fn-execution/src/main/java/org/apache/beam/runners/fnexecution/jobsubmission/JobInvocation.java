@@ -17,15 +17,17 @@
  */
 package org.apache.beam.runners.fnexecution.jobsubmission;
 
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkArgument;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Throwables.getRootCause;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Throwables.getStackTraceAsString;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Throwables.getRootCause;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Throwables.getStackTraceAsString;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 import java.util.function.Consumer;
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import org.apache.beam.model.jobmanagement.v1.JobApi;
 import org.apache.beam.model.jobmanagement.v1.JobApi.JobMessage;
 import org.apache.beam.model.jobmanagement.v1.JobApi.JobState;
 import org.apache.beam.model.jobmanagement.v1.JobApi.JobState.Enum;
@@ -33,10 +35,10 @@ import org.apache.beam.model.pipeline.v1.RunnerApi;
 import org.apache.beam.model.pipeline.v1.RunnerApi.Pipeline;
 import org.apache.beam.runners.fnexecution.provisioning.JobInfo;
 import org.apache.beam.sdk.PipelineResult;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.util.concurrent.FutureCallback;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.util.concurrent.Futures;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.util.concurrent.ListenableFuture;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.util.concurrent.ListeningExecutorService;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.util.concurrent.FutureCallback;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.util.concurrent.Futures;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.util.concurrent.ListenableFuture;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.util.concurrent.ListeningExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,7 +54,9 @@ public class JobInvocation {
   private List<Consumer<Enum>> stateObservers;
   private List<Consumer<JobMessage>> messageObservers;
   private JobState.Enum jobState;
-  @Nullable private ListenableFuture<PipelineResult> invocationFuture;
+  private JobApi.MetricResults metrics;
+  private PortablePipelineResult resultHandle;
+  @Nullable private ListenableFuture<PortablePipelineResult> invocationFuture;
 
   public JobInvocation(
       JobInfo jobInfo,
@@ -67,9 +71,10 @@ public class JobInvocation {
     this.messageObservers = new ArrayList<>();
     this.invocationFuture = null;
     this.jobState = JobState.Enum.STOPPED;
+    this.metrics = JobApi.MetricResults.newBuilder().build();
   }
 
-  private PipelineResult runPipeline() throws Exception {
+  private PortablePipelineResult runPipeline() throws Exception {
     return pipelineRunner.run(pipeline, jobInfo);
   }
 
@@ -85,21 +90,46 @@ public class JobInvocation {
     setState(JobState.Enum.RUNNING);
     Futures.addCallback(
         invocationFuture,
-        new FutureCallback<PipelineResult>() {
+        new FutureCallback<PortablePipelineResult>() {
           @Override
-          public void onSuccess(@Nullable PipelineResult pipelineResult) {
+          public void onSuccess(PortablePipelineResult pipelineResult) {
             if (pipelineResult != null) {
-              checkArgument(
-                  pipelineResult.getState() == PipelineResult.State.DONE,
-                  "Success on non-Done state: " + pipelineResult.getState());
-              setState(JobState.Enum.DONE);
+              PipelineResult.State state = pipelineResult.getState();
+
+              if (state.isTerminal()) {
+                metrics = pipelineResult.portableMetrics();
+              } else {
+                resultHandle = pipelineResult;
+              }
+
+              switch (state) {
+                case DONE:
+                  setState(Enum.DONE);
+                  break;
+                case RUNNING:
+                  setState(Enum.RUNNING);
+                  break;
+                case CANCELLED:
+                  setState(Enum.CANCELLED);
+                  break;
+                case FAILED:
+                  setState(Enum.FAILED);
+                  break;
+                default:
+                  setState(JobState.Enum.UNSPECIFIED);
+              }
             } else {
               setState(JobState.Enum.UNSPECIFIED);
             }
           }
 
           @Override
-          public void onFailure(Throwable throwable) {
+          public void onFailure(@Nonnull Throwable throwable) {
+            if (throwable instanceof CancellationException) {
+              // We have canceled execution, just update the job state
+              setState(JobState.Enum.CANCELLED);
+              return;
+            }
             String message = String.format("Error during job invocation %s.", getId());
             LOG.error(message, throwable);
             sendMessage(
@@ -130,12 +160,15 @@ public class JobInvocation {
       this.invocationFuture.cancel(true /* mayInterruptIfRunning */);
       Futures.addCallback(
           invocationFuture,
-          new FutureCallback<PipelineResult>() {
+          new FutureCallback<PortablePipelineResult>() {
             @Override
-            public void onSuccess(@Nullable PipelineResult pipelineResult) {
-              if (pipelineResult != null) {
+            public void onSuccess(PortablePipelineResult pipelineResult) {
+              // Do not cancel when we are already done.
+              if (pipelineResult != null
+                  && pipelineResult.getState() != PipelineResult.State.DONE) {
                 try {
                   pipelineResult.cancel();
+                  setState(JobState.Enum.CANCELLED);
                 } catch (IOException exn) {
                   throw new RuntimeException(exn);
                 }
@@ -149,9 +182,21 @@ public class JobInvocation {
     }
   }
 
+  public JobApi.MetricResults getMetrics() {
+    if (resultHandle != null) {
+      metrics = resultHandle.portableMetrics();
+    }
+    return metrics;
+  }
+
   /** Retrieve the job's current state. */
   public JobState.Enum getState() {
     return this.jobState;
+  }
+
+  /** Retrieve the job's pipeline. */
+  public RunnerApi.Pipeline getPipeline() {
+    return this.pipeline;
   }
 
   /** Listen for job state changes with a {@link Consumer}. */
@@ -163,6 +208,16 @@ public class JobInvocation {
   /** Listen for job messages with a {@link Consumer}. */
   public synchronized void addMessageListener(Consumer<JobMessage> messageStreamObserver) {
     messageObservers.add(messageStreamObserver);
+  }
+
+  /** Convert to {@link JobApi.JobInfo}. */
+  public JobApi.JobInfo toProto() {
+    return JobApi.JobInfo.newBuilder()
+        .setJobId(jobInfo.jobId())
+        .setJobName(jobInfo.jobName())
+        .setPipelineOptions(jobInfo.pipelineOptions())
+        .setState(getState())
+        .build();
   }
 
   private synchronized void setState(JobState.Enum state) {

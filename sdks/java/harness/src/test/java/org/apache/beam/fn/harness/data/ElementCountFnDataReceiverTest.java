@@ -65,13 +65,13 @@ public class ElementCountFnDataReceiverTest {
 
     SimpleMonitoringInfoBuilder builder = new SimpleMonitoringInfoBuilder();
     builder.setUrn(MonitoringInfoConstants.Urns.ELEMENT_COUNT);
-    builder.setPCollectionLabel(pCollectionA);
+    builder.setLabel(MonitoringInfoConstants.Labels.PCOLLECTION, pCollectionA);
     builder.setInt64Value(numElements);
     MonitoringInfo expected = builder.build();
 
     // Clear the timestamp before comparison.
     MonitoringInfo first = metricsContainerRegistry.getMonitoringInfos().iterator().next();
-    MonitoringInfo result = SimpleMonitoringInfoBuilder.clearTimestamp(first);
+    MonitoringInfo result = SimpleMonitoringInfoBuilder.copyAndClearTimestamp(first);
     assertEquals(expected, result);
   }
 
@@ -92,7 +92,7 @@ public class ElementCountFnDataReceiverTest {
     verify(consumer, times(1)).accept(element);
 
     // Verify that static scopedMetricsContainer is called with unbound container.
-    PowerMockito.verifyStatic(times(1));
+    PowerMockito.verifyStatic(MetricsEnvironment.class, times(1));
     MetricsEnvironment.scopedMetricsContainer(metricsContainerRegistry.getUnboundContainer());
   }
 }

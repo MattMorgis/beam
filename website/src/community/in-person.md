@@ -28,7 +28,7 @@ While the official communication happens on the mailing list, and you can find u
 
 ## Meetups
 
-We occassionally meetup in various locations around the globe.  Active or to-be-started meetups include:
+We occasionally meet up in various locations around the globe. Active or to-be-started meetups include:
 
 | Meetup City | Name |
 | ----------------- | ---------------|
@@ -37,10 +37,11 @@ We occassionally meetup in various locations around the globe.  Active or to-be-
 | San Francisco | [Bay Area Apache Beam](https://www.meetup.com/San-Francisco-Apache-Beam/) |
 | Los Angeles | [Los Angeles Apache Beam](https://www.meetup.com/Los-Angeles-Apache-Beam/) |
 | Washington DC | [Washington DC Apache Beam Meetup](https://www.meetup.com/DC-Apache-Beam/) |
-| New York City | [New York Apache Beam](https://www.meetup.com/New-York-Apache-Beam/) |:
+| New York City | [New York Apache Beam](https://www.meetup.com/New-York-Apache-Beam/) |
+| Paris | [Paris Apache Beam](https://www.meetup.com/Paris-Apache-Beam-Meetup/) |:
 {:.table}
 
-The above are the meetups that are already known to the community (please add if you are organizing one!).  For Meetups that are tagged with 'Apache Beam', see the [list](https://www.meetup.com/topics/apache-beam/).
+The above are the meetups that are already known to the community (please add if you are organizing one!). For Meetups that are tagged with 'Apache Beam', see the [list](https://www.meetup.com/topics/apache-beam/).
 
 
 ## Conference Talks

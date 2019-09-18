@@ -17,15 +17,16 @@
  */
 package org.apache.beam.sdk.transforms;
 
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkArgument;
 
 import java.io.Serializable;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 import javax.annotation.Nullable;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineRunner;
@@ -39,6 +40,8 @@ import org.apache.beam.sdk.schemas.NoSuchSchemaException;
 import org.apache.beam.sdk.schemas.Schema;
 import org.apache.beam.sdk.schemas.SchemaCoder;
 import org.apache.beam.sdk.schemas.SchemaRegistry;
+import org.apache.beam.sdk.schemas.utils.ConvertHelpers;
+import org.apache.beam.sdk.schemas.utils.SelectHelpers;
 import org.apache.beam.sdk.state.StateSpec;
 import org.apache.beam.sdk.transforms.DoFn.WindowedContext;
 import org.apache.beam.sdk.transforms.display.DisplayData;
@@ -50,6 +53,7 @@ import org.apache.beam.sdk.transforms.reflect.DoFnSignature.FieldAccessDeclarati
 import org.apache.beam.sdk.transforms.reflect.DoFnSignature.MethodWithExtraParameters;
 import org.apache.beam.sdk.transforms.reflect.DoFnSignature.OnTimerMethod;
 import org.apache.beam.sdk.transforms.reflect.DoFnSignature.Parameter.SchemaElementParameter;
+import org.apache.beam.sdk.transforms.reflect.DoFnSignature.Parameter.SideInputParameter;
 import org.apache.beam.sdk.transforms.reflect.DoFnSignatures;
 import org.apache.beam.sdk.transforms.windowing.BoundedWindow;
 import org.apache.beam.sdk.transforms.windowing.WindowFn;
@@ -59,11 +63,10 @@ import org.apache.beam.sdk.values.PCollectionTuple;
 import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.PCollectionViews;
 import org.apache.beam.sdk.values.PValue;
-import org.apache.beam.sdk.values.Row;
 import org.apache.beam.sdk.values.TupleTag;
 import org.apache.beam.sdk.values.TupleTagList;
 import org.apache.beam.sdk.values.TypeDescriptor;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableList;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
 
 /**
  * {@link ParDo} is the core element-wise transform in Apache Beam, invoking a user-specified
@@ -222,18 +225,18 @@ import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableLis
  *             public void processElement(@Element String word, MultiOutputReceiver r) {
  *               if (word.length() <= wordLengthCutOff) {
  *                 // Emit this short word to the main output.
- *                 r.output(wordsBelowCutOffTag, word);
+ *                 r.get(wordsBelowCutOffTag).output(word);
  *               } else {
  *                 // Emit this long word's length to a specified output.
- *                 r.output(wordLengthsAboveCutOffTag, word.length());
+ *                 r.get(wordLengthsAboveCutOffTag).output(word.length());
  *               }
  *               if (word.startsWith("MARKER")) {
  *                 // Emit this word to a different specified output.
- *                 r.output(markedWordsTag, word);
+ *                 r.get(markedWordsTag).output(word);
  *               }
  *               if (word.startsWith("SPECIAL")) {
  *                 // Emit this word to the unconsumed output.
- *                 r.output(specialWordsTag, word);
+ *                 r.get(specialWordsTag).output(word);
  *               }
  *             }}})
  *             // Specify the main and consumed output tags of the
@@ -381,8 +384,8 @@ import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableLis
  * Beam makes heavy use of this modular, composable style, trusting to the runner to "flatten out"
  * all the compositions into highly optimized stages.
  *
- * @see <a href= "https://beam.apache.org/documentation/programming-guide/#transforms-pardo"> the
- *     web documentation for ParDo</a>
+ * @see <a href= "https://beam.apache.org/documentation/programming-guide/#pardo"> the web
+ *     documentation for ParDo</a>
  */
 public class ParDo {
 
@@ -394,7 +397,7 @@ public class ParDo {
    */
   public static <InputT, OutputT> SingleOutput<InputT, OutputT> of(DoFn<InputT, OutputT> fn) {
     validate(fn);
-    return new SingleOutput<>(fn, Collections.emptyList(), displayDataForFn(fn));
+    return new SingleOutput<>(fn, Collections.emptyMap(), displayDataForFn(fn));
   }
 
   private static <T> DisplayData.ItemSpec<? extends Class<?>> displayDataForFn(T fn) {
@@ -435,7 +438,30 @@ public class ParDo {
     }
   }
 
-  private static void validateFieldAccessParameter(
+  private static void validateSideInputTypes(
+      Map<String, PCollectionView<?>> sideInputs, DoFn<?, ?> fn) {
+    DoFnSignature signature = DoFnSignatures.getSignature(fn.getClass());
+    DoFnSignature.ProcessElementMethod processElementMethod = signature.processElement();
+    for (SideInputParameter sideInput : processElementMethod.getSideInputParameters()) {
+      PCollectionView<?> view = sideInputs.get(sideInput.sideInputId());
+      checkArgument(
+          view != null,
+          "the ProcessElement method expects a side input identified with the tag %s, but no such side input was"
+              + " supplied. Use withSideInput(String, PCollectionView) to supply this side input.",
+          sideInput.sideInputId());
+      TypeDescriptor<?> viewType = view.getViewFn().getTypeDescriptor();
+
+      // Currently check that the types exactly match, even if the types are convertible.
+      checkArgument(
+          viewType.equals(sideInput.elementT()),
+          "Side Input with tag %s and type %s cannot be bound to ProcessElement parameter with type %s",
+          sideInput.sideInputId(),
+          viewType,
+          sideInput.elementT());
+    }
+  }
+
+  private static FieldAccessDescriptor getFieldAccessDescriptorFromParameter(
       @Nullable String fieldAccessString,
       Schema inputSchema,
       Map<String, FieldAccessDeclaration> fieldAccessDeclarations,
@@ -448,25 +474,25 @@ public class ParDo {
     // here as well to catch these errors.
     FieldAccessDescriptor fieldAccessDescriptor = null;
     if (fieldAccessString == null) {
-      // This is the case where no FieldId is defined, just an @Element Row row. Default to all
-      // fields accessed.
+      // This is the case where no FieldId is defined. Default to all fields accessed.
       fieldAccessDescriptor = FieldAccessDescriptor.withAllFields();
     } else {
-      // In this case, we expect to have a FieldAccessDescriptor defined in the class.
+      // If there is a FieldAccessDescriptor in the class with this id, use that.
       FieldAccessDeclaration fieldAccessDeclaration =
           fieldAccessDeclarations.get(fieldAccessString);
-      checkArgument(
-          fieldAccessDeclaration != null,
-          "No FieldAccessDeclaration  defined with id",
-          fieldAccessString);
-      checkArgument(fieldAccessDeclaration.field().getType().equals(FieldAccessDescriptor.class));
-      try {
-        fieldAccessDescriptor = (FieldAccessDescriptor) fieldAccessDeclaration.field().get(fn);
-      } catch (IllegalAccessException e) {
-        throw new RuntimeException(e);
+      if (fieldAccessDeclaration != null) {
+        checkArgument(fieldAccessDeclaration.field().getType().equals(FieldAccessDescriptor.class));
+        try {
+          fieldAccessDescriptor = (FieldAccessDescriptor) fieldAccessDeclaration.field().get(fn);
+        } catch (IllegalAccessException e) {
+          throw new RuntimeException(e);
+        }
+      } else {
+        // Otherwise, interpret the string as a field-name expression.
+        fieldAccessDescriptor = FieldAccessDescriptor.withFieldNames(fieldAccessString);
       }
     }
-    fieldAccessDescriptor.resolve(inputSchema);
+    return fieldAccessDescriptor.resolve(inputSchema);
   }
 
   /**
@@ -561,7 +587,6 @@ public class ParDo {
               fn.getClass().getName()));
     }
   }
-
   /**
    * Extract information on how the DoFn uses schemas. In particular, if the schema of an element
    * parameter does not match the input PCollection's schema, convert.
@@ -571,64 +596,44 @@ public class ParDo {
       DoFn<?, ?> fn, PCollection<?> input) {
     DoFnSignature signature = DoFnSignatures.getSignature(fn.getClass());
     DoFnSignature.ProcessElementMethod processElementMethod = signature.processElement();
-    SchemaElementParameter elementParameter = processElementMethod.getSchemaElementParameter();
-    boolean validateInputSchema = elementParameter != null;
-    TypeDescriptor<?> elementT = null;
-    if (validateInputSchema) {
-      elementT = (TypeDescriptor<?>) elementParameter.elementT();
-    }
-
-    DoFnSchemaInformation doFnSchemaInformation = DoFnSchemaInformation.create();
-    if (validateInputSchema) {
-      // Element type doesn't match input type, so we need to covnert.
+    if (!processElementMethod.getSchemaElementParameters().isEmpty()) {
       if (!input.hasSchema()) {
         throw new IllegalArgumentException("Type of @Element must match the DoFn type" + input);
       }
+    }
 
-      validateFieldAccessParameter(
-          elementParameter.fieldAccessString(),
-          input.getSchema(),
-          signature.fieldAccessDeclarations(),
-          fn);
-
-      boolean toRow = elementT.equals(TypeDescriptor.of(Row.class));
-      if (toRow) {
+    SchemaRegistry schemaRegistry = input.getPipeline().getSchemaRegistry();
+    DoFnSchemaInformation doFnSchemaInformation = DoFnSchemaInformation.create();
+    for (SchemaElementParameter parameter : processElementMethod.getSchemaElementParameters()) {
+      TypeDescriptor<?> elementT = parameter.elementT();
+      FieldAccessDescriptor accessDescriptor =
+          getFieldAccessDescriptorFromParameter(
+              parameter.fieldAccessString(),
+              input.getSchema(),
+              signature.fieldAccessDeclarations(),
+              fn);
+      Schema selectedSchema = SelectHelpers.getOutputSchema(input.getSchema(), accessDescriptor);
+      ConvertHelpers.ConvertedSchemaInformation converted =
+          ConvertHelpers.getConvertedSchemaInformation(selectedSchema, elementT, schemaRegistry);
+      if (converted.outputSchemaCoder != null) {
         doFnSchemaInformation =
-            doFnSchemaInformation.withElementParameterSchema(
-                SchemaCoder.of(
-                    input.getSchema(),
-                    SerializableFunctions.identity(),
-                    SerializableFunctions.identity()));
+            doFnSchemaInformation.withSelectFromSchemaParameter(
+                (SchemaCoder<?>) input.getCoder(),
+                accessDescriptor,
+                selectedSchema,
+                converted.outputSchemaCoder,
+                converted.unboxedType != null);
       } else {
-        // For now we assume the parameter is not of type Row (TODO: change this)
-        SchemaRegistry schemaRegistry = input.getPipeline().getSchemaRegistry();
-        try {
-          Schema schema = schemaRegistry.getSchema(elementT);
-          SerializableFunction toRowFunction = schemaRegistry.getToRowFunction(elementT);
-          SerializableFunction fromRowFunction = schemaRegistry.getFromRowFunction(elementT);
-          doFnSchemaInformation =
-              doFnSchemaInformation.withElementParameterSchema(
-                  SchemaCoder.of(schema, toRowFunction, fromRowFunction));
-
-          // assert matches input schema.
-          // TODO: Properly handle nullable.
-          if (!doFnSchemaInformation
-              .getElementParameterSchema()
-              .getSchema()
-              .assignableToIgnoreNullable(input.getSchema())) {
-            throw new IllegalArgumentException(
-                "Input to DoFn has schema: "
-                    + input.getSchema()
-                    + " However @ElementParameter of type "
-                    + elementT
-                    + " has incompatible schema "
-                    + doFnSchemaInformation.getElementParameterSchema().getSchema());
-          }
-        } catch (NoSuchSchemaException e) {
-          throw new RuntimeException("No schema registered for " + elementT);
-        }
+        // If the selected schema is a Row containing a single primitive type (which is the output
+        // of Select when selecting a primitive), attempt to unbox it and match against the
+        // parameter.
+        checkArgument(converted.unboxedType != null);
+        doFnSchemaInformation =
+            doFnSchemaInformation.withUnboxPrimitiveParameter(
+                (SchemaCoder<?>) input.getCoder(), accessDescriptor, selectedSchema, elementT);
       }
     }
+
     return doFnSchemaInformation;
   }
 
@@ -648,19 +653,18 @@ public class ParDo {
 
     private static final String MAIN_OUTPUT_TAG = "output";
 
-    private final List<PCollectionView<?>> sideInputs;
+    private final Map<String, PCollectionView<?>> sideInputs;
     private final DoFn<InputT, OutputT> fn;
     private final DisplayData.ItemSpec<? extends Class<?>> fnDisplayData;
 
     SingleOutput(
         DoFn<InputT, OutputT> fn,
-        List<PCollectionView<?>> sideInputs,
+        Map<String, PCollectionView<?>> sideInputs,
         DisplayData.ItemSpec<? extends Class<?>> fnDisplayData) {
       this.fn = fn;
       this.fnDisplayData = fnDisplayData;
       this.sideInputs = sideInputs;
     }
-
     /**
      * Returns a new {@link ParDo} {@link PTransform} that's like this {@link PTransform} but with
      * the specified additional side inputs. Does not modify this {@link PTransform}.
@@ -679,13 +683,36 @@ public class ParDo {
      */
     public SingleOutput<InputT, OutputT> withSideInputs(
         Iterable<? extends PCollectionView<?>> sideInputs) {
+      Map<String, PCollectionView<?>> mappedInputs =
+          StreamSupport.stream(sideInputs.spliterator(), false)
+              .collect(Collectors.toMap(v -> v.getTagInternal().getId(), v -> v));
+      return withSideInputs(mappedInputs);
+    }
+
+    /**
+     * Returns a new {@link ParDo} {@link PTransform} that's like this {@link PTransform} but with
+     * the specified additional side inputs. Does not modify this {@link PTransform}.
+     *
+     * <p>See the discussion of Side Inputs above for more explanation.
+     */
+    public SingleOutput<InputT, OutputT> withSideInputs(
+        Map<String, PCollectionView<?>> sideInputs) {
       return new SingleOutput<>(
           fn,
-          ImmutableList.<PCollectionView<?>>builder()
-              .addAll(this.sideInputs)
-              .addAll(sideInputs)
+          ImmutableMap.<String, PCollectionView<?>>builder()
+              .putAll(this.sideInputs)
+              .putAll(sideInputs)
               .build(),
           fnDisplayData);
+    }
+
+    /**
+     * Returns a new {@link ParDo} {@link PTransform} that's like this {@link PTransform} but with
+     * the specified additional side inputs. Does not modify this {@link PTransform}.
+     */
+    public SingleOutput<InputT, OutputT> withSideInput(
+        String tagId, PCollectionView<?> pCollectionView) {
+      return withSideInputs(Collections.singletonMap(tagId, pCollectionView));
     }
 
     /**
@@ -704,7 +731,6 @@ public class ParDo {
       SchemaRegistry schemaRegistry = input.getPipeline().getSchemaRegistry();
       CoderRegistry registry = input.getPipeline().getCoderRegistry();
       finishSpecifyingStateSpecs(fn, registry, input.getCoder());
-
       TupleTag<OutputT> mainOutput = new TupleTag<>(MAIN_OUTPUT_TAG);
       PCollection<OutputT> res =
           input.apply(withOutputTags(mainOutput, TupleTagList.empty())).get(mainOutput);
@@ -751,7 +777,7 @@ public class ParDo {
       return fn;
     }
 
-    public List<PCollectionView<?>> getSideInputs() {
+    public Map<String, PCollectionView<?>> getSideInputs() {
       return sideInputs;
     }
 
@@ -762,7 +788,7 @@ public class ParDo {
      */
     @Override
     public Map<TupleTag<?>, PValue> getAdditionalInputs() {
-      return PCollectionViews.toAdditionalInputs(sideInputs);
+      return PCollectionViews.toAdditionalInputs(sideInputs.values());
     }
 
     @Override
@@ -782,7 +808,7 @@ public class ParDo {
    */
   public static class MultiOutput<InputT, OutputT>
       extends PTransform<PCollection<? extends InputT>, PCollectionTuple> {
-    private final List<PCollectionView<?>> sideInputs;
+    private final Map<String, PCollectionView<?>> sideInputs;
     private final TupleTag<OutputT> mainOutputTag;
     private final TupleTagList additionalOutputTags;
     private final DisplayData.ItemSpec<? extends Class<?>> fnDisplayData;
@@ -790,7 +816,7 @@ public class ParDo {
 
     MultiOutput(
         DoFn<InputT, OutputT> fn,
-        List<PCollectionView<?>> sideInputs,
+        Map<String, PCollectionView<?>> sideInputs,
         TupleTag<OutputT> mainOutputTag,
         TupleTagList additionalOutputTags,
         ItemSpec<? extends Class<?>> fnDisplayData) {
@@ -812,6 +838,14 @@ public class ParDo {
       return withSideInputs(Arrays.asList(sideInputs));
     }
 
+    public MultiOutput<InputT, OutputT> withSideInputs(
+        Iterable<? extends PCollectionView<?>> sideInputs) {
+      Map<String, PCollectionView<?>> mappedInputs =
+          StreamSupport.stream(sideInputs.spliterator(), false)
+              .collect(Collectors.toMap(v -> v.getTagInternal().getId(), v -> v));
+      return withSideInputs(mappedInputs);
+    }
+
     /**
      * Returns a new multi-output {@link ParDo} {@link PTransform} that's like this {@link
      * PTransform} but with the specified additional side inputs. Does not modify this {@link
@@ -819,17 +853,26 @@ public class ParDo {
      *
      * <p>See the discussion of Side Inputs above for more explanation.
      */
-    public MultiOutput<InputT, OutputT> withSideInputs(
-        Iterable<? extends PCollectionView<?>> sideInputs) {
+    public MultiOutput<InputT, OutputT> withSideInputs(Map<String, PCollectionView<?>> sideInputs) {
       return new MultiOutput<>(
           fn,
-          ImmutableList.<PCollectionView<?>>builder()
-              .addAll(this.sideInputs)
-              .addAll(sideInputs)
+          ImmutableMap.<String, PCollectionView<?>>builder()
+              .putAll(this.sideInputs)
+              .putAll(sideInputs)
               .build(),
           mainOutputTag,
           additionalOutputTags,
           fnDisplayData);
+    }
+
+    /**
+     * Returns a new multi-output {@link ParDo} {@link PTransform} that's like this {@link
+     * PTransform} but with the specified additional side inputs. Does not modify this {@link
+     * PTransform}.
+     */
+    public MultiOutput<InputT, OutputT> withSideInput(
+        String tagId, PCollectionView<?> pCollectionView) {
+      return withSideInputs(Collections.singletonMap(tagId, pCollectionView));
     }
 
     @Override
@@ -845,6 +888,8 @@ public class ParDo {
       if (signature.usesState() || signature.usesTimers()) {
         validateStateApplicableForInput(fn, input);
       }
+
+      validateSideInputTypes(sideInputs, fn);
 
       // TODO: We should validate OutputReceiver<Row> only happens if the output PCollection
       // as schema. However coder/schema inference may not have happened yet at this point.
@@ -902,7 +947,7 @@ public class ParDo {
       return additionalOutputTags;
     }
 
-    public List<PCollectionView<?>> getSideInputs() {
+    public Map<String, PCollectionView<?>> getSideInputs() {
       return sideInputs;
     }
 
@@ -913,7 +958,7 @@ public class ParDo {
      */
     @Override
     public Map<TupleTag<?>, PValue> getAdditionalInputs() {
-      return PCollectionViews.toAdditionalInputs(sideInputs);
+      return PCollectionViews.toAdditionalInputs(sideInputs.values());
     }
 
     @Override

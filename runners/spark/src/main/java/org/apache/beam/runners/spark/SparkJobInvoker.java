@@ -24,8 +24,8 @@ import org.apache.beam.runners.core.construction.PipelineOptionsTranslation;
 import org.apache.beam.runners.fnexecution.jobsubmission.JobInvocation;
 import org.apache.beam.runners.fnexecution.jobsubmission.JobInvoker;
 import org.apache.beam.runners.fnexecution.provisioning.JobInfo;
-import org.apache.beam.vendor.grpc.v1p13p1.com.google.protobuf.Struct;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.util.concurrent.ListeningExecutorService;
+import org.apache.beam.vendor.grpc.v1p21p0.com.google.protobuf.Struct;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.util.concurrent.ListeningExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,12 +34,16 @@ public class SparkJobInvoker extends JobInvoker {
 
   private static final Logger LOG = LoggerFactory.getLogger(SparkJobInvoker.class);
 
-  public static SparkJobInvoker create() {
-    return new SparkJobInvoker();
+  private SparkJobServerDriver.SparkServerConfiguration configuration;
+
+  public static SparkJobInvoker create(
+      SparkJobServerDriver.SparkServerConfiguration configuration) {
+    return new SparkJobInvoker(configuration);
   }
 
-  private SparkJobInvoker() {
+  private SparkJobInvoker(SparkJobServerDriver.SparkServerConfiguration configuration) {
     super("spark-runner-job-invoker");
+    this.configuration = configuration;
   }
 
   @Override
@@ -55,6 +59,10 @@ public class SparkJobInvoker extends JobInvoker {
     String invocationId =
         String.format("%s_%s", sparkOptions.getJobName(), UUID.randomUUID().toString());
     LOG.info("Invoking job {}", invocationId);
+
+    if (sparkOptions.getSparkMaster().equals(SparkPipelineOptions.DEFAULT_MASTER_URL)) {
+      sparkOptions.setSparkMaster(configuration.getSparkMasterUrl());
+    }
 
     // Options can't be translated to proto if runner class is unresolvable, so set it to null.
     sparkOptions.setRunner(null);

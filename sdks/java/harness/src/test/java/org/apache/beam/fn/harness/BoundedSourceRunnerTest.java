@@ -43,10 +43,10 @@ import org.apache.beam.sdk.io.CountingSource;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.util.SerializableUtils;
 import org.apache.beam.sdk.util.WindowedValue;
-import org.apache.beam.vendor.grpc.v1p13p1.com.google.protobuf.ByteString;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Suppliers;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableList;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterables;
+import org.apache.beam.vendor.grpc.v1p21p0.com.google.protobuf.ByteString;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Suppliers;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableList;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterables;
 import org.hamcrest.Matchers;
 import org.hamcrest.collection.IsMapContaining;
 import org.junit.Test;
@@ -57,7 +57,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class BoundedSourceRunnerTest {
 
-  public static final String URN = "urn:org.apache.beam:source:java:0.1";
+  public static final String URN = "beam:source:java:0.1";
 
   @Test
   public void testRunReadLoopWithMultipleSources() throws Exception {
@@ -144,7 +144,7 @@ public class BoundedSourceRunnerTest {
 
     RunnerApi.FunctionSpec functionSpec =
         RunnerApi.FunctionSpec.newBuilder()
-            .setUrn("urn:org.apache.beam:source:java:0.1")
+            .setUrn("beam:source:java:0.1")
             .setPayload(
                 ByteString.copyFrom(SerializableUtils.serializeToByteArray(CountingSource.upTo(3))))
             .build();

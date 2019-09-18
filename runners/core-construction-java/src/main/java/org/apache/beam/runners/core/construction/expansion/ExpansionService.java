@@ -38,6 +38,7 @@ import org.apache.beam.model.pipeline.v1.RunnerApi;
 import org.apache.beam.runners.core.construction.BeamUrns;
 import org.apache.beam.runners.core.construction.CoderTranslation;
 import org.apache.beam.runners.core.construction.Environments;
+import org.apache.beam.runners.core.construction.JavaReadViaImpulse;
 import org.apache.beam.runners.core.construction.PipelineTranslation;
 import org.apache.beam.runners.core.construction.RehydratedComponents;
 import org.apache.beam.runners.core.construction.SdkComponents;
@@ -53,15 +54,16 @@ import org.apache.beam.sdk.values.PDone;
 import org.apache.beam.sdk.values.PInput;
 import org.apache.beam.sdk.values.POutput;
 import org.apache.beam.sdk.values.TupleTag;
-import org.apache.beam.vendor.grpc.v1p13p1.io.grpc.Server;
-import org.apache.beam.vendor.grpc.v1p13p1.io.grpc.ServerBuilder;
-import org.apache.beam.vendor.grpc.v1p13p1.io.grpc.stub.StreamObserver;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.annotations.VisibleForTesting;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.CaseFormat;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Converter;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterables;
+import org.apache.beam.vendor.grpc.v1p21p0.io.grpc.Server;
+import org.apache.beam.vendor.grpc.v1p21p0.io.grpc.ServerBuilder;
+import org.apache.beam.vendor.grpc.v1p21p0.io.grpc.stub.StreamObserver;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.annotations.VisibleForTesting;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.CaseFormat;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Converter;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableList;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -177,11 +179,15 @@ public class ExpansionService extends ExpansionServiceGrpc.ExpansionServiceImplB
         } catch (NoSuchMethodException e) {
           throw new RuntimeException(
               String.format(
-                  "The configuration class %s is missing a setter %s for %s",
-                  config.getClass(), setterName, fieldName),
+                  "The configuration class %s is missing a setter %s for %s with type %s",
+                  config.getClass(),
+                  setterName,
+                  fieldName,
+                  coder.getEncodedTypeDescriptor().getType().getTypeName()),
               e);
         }
-        method.invoke(config, coder.decode(entry.getValue().getPayload().newInput()));
+        method.invoke(
+            config, coder.decode(entry.getValue().getPayload().newInput(), Coder.Context.NESTED));
       }
     }
 
@@ -203,10 +209,7 @@ public class ExpansionService extends ExpansionServiceGrpc.ExpansionServiceImplB
       final String coderUrn = coderUrns.pop();
       RunnerApi.Coder.Builder coderBuilder =
           RunnerApi.Coder.newBuilder()
-              .setSpec(
-                  RunnerApi.SdkFunctionSpec.newBuilder()
-                      .setSpec(RunnerApi.FunctionSpec.newBuilder().setUrn(coderUrn).build())
-                      .build());
+              .setSpec(RunnerApi.FunctionSpec.newBuilder().setUrn(coderUrn).build());
 
       if (coderUrn.equals(BeamUrns.getUrn(RunnerApi.StandardCoders.Enum.ITERABLE))) {
         RunnerApi.Coder elementCoder = buildProto(coderUrns, componentsBuilder);
@@ -343,6 +346,7 @@ public class ExpansionService extends ExpansionServiceGrpc.ExpansionServiceImplB
     SdkComponents sdkComponents =
         rehydratedComponents.getSdkComponents().withNewIdPrefix(request.getNamespace());
     sdkComponents.registerEnvironment(Environments.JAVA_SDK_HARNESS_ENVIRONMENT);
+    pipeline.replaceAll(ImmutableList.of(JavaReadViaImpulse.boundedOverride()));
     RunnerApi.Pipeline pipelineProto = PipelineTranslation.toProto(pipeline, sdkComponents);
     String expandedTransformId =
         Iterables.getOnlyElement(

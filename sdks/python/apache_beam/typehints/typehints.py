@@ -67,6 +67,7 @@ from __future__ import absolute_import
 
 import collections
 import copy
+import logging
 import sys
 import types
 from builtins import next
@@ -525,6 +526,7 @@ class UnionHint(CompositeTypeHint):
 
     # Flatten nested Union's and duplicated repeated type hints.
     params = set()
+    dict_union = None
     for t in type_params:
       validate_composite_type_param(
           t, error_msg_prefix='All parameters to a Union hint'
@@ -532,8 +534,17 @@ class UnionHint(CompositeTypeHint):
 
       if isinstance(t, self.UnionConstraint):
         params |= t.union_types
+      elif isinstance(t, DictConstraint):
+        if dict_union is None:
+          dict_union = t
+        else:
+          dict_union.key_type = Union[dict_union.key_type, t.key_type]
+          dict_union.value_type = Union[dict_union.value_type, t.value_type]
       else:
         params.add(t)
+
+    if dict_union is not None:
+      params.add(dict_union)
 
     if Any in params:
       return Any
@@ -797,7 +808,7 @@ class DictHint(CompositeTypeHint):
     def _consistent_with_check_(self, sub):
       return (isinstance(sub, self.__class__)
               and is_consistent_with(sub.key_type, self.key_type)
-              and is_consistent_with(sub.key_type, self.key_type))
+              and is_consistent_with(sub.value_type, self.value_type))
 
     def _raise_hint_exception_or_inner_exception(self, is_key,
                                                  incorrect_instance,
@@ -976,6 +987,13 @@ class IteratorHint(CompositeTypeHint):
     def __repr__(self):
       return 'Iterator[%s]' % _unified_repr(self.yielded_type)
 
+    def __eq__(self, other):
+      return (type(self) == type(other)
+              and self.yielded_type == other.yielded_type)
+
+    def __hash__(self):
+      return hash(self.yielded_type)
+
     def _inner_types(self):
       yield self.yielded_type
 
@@ -1058,7 +1076,22 @@ class WindowedTypeConstraint(with_metaclass(GetitemConstructor,
 
 
 class GeneratorHint(IteratorHint):
-  pass
+  """A Generator type hint.
+
+  Subscriptor is in the form [yield_type, send_type, return_type], however
+  only yield_type is supported. The 2 others are expected to be None.
+  """
+
+  def __getitem__(self, type_params):
+    if isinstance(type_params, tuple) and len(type_params) == 3:
+      yield_type, send_type, return_type = type_params
+      if send_type is not None:
+        logging.warning('Ignoring send_type hint: %s' % send_type)
+      if send_type is not None:
+        logging.warning('Ignoring return_type hint: %s' % return_type)
+    else:
+      yield_type = type_params
+    return self.IteratorTypeConstraint(yield_type)
 
 
 # Create the actual instances for all defined type-hints above.
@@ -1110,9 +1143,9 @@ _KNOWN_PRIMITIVE_TYPES.update({
 
 
 def is_consistent_with(sub, base):
-  """Returns whether the type a is consistent with b.
+  """Checks whether sub a is consistent with base.
 
-  This is accordig to the terminology of PEP 483/484.  This relationship is
+  This is according to the terminology of PEP 483/484.  This relationship is
   neither symmetric nor transitive, but a good mnemonic to keep in mind is that
   is_consistent_with(a, b) is roughly equivalent to the issubclass(a, b)
   relation, but also handles the special Any type as well as type
@@ -1135,11 +1168,42 @@ def is_consistent_with(sub, base):
   return issubclass(sub, base)
 
 
-def coerce_to_kv_type(element_type, label=None):
+def get_yielded_type(type_hint):
+  """Obtains the type of elements yielded by an iterable.
+
+  Note that "iterable" here means: can be iterated over in a for loop.
+
+  Args:
+    type_hint: (TypeConstraint) The iterable in question. Must be normalize()-d.
+
+  Returns:
+    Yielded type of the iterable.
+
+  Raises:
+    ValueError if not iterable.
+  """
+  if isinstance(type_hint, AnyTypeConstraint):
+    return type_hint
+  if is_consistent_with(type_hint, Iterator[Any]):
+    return type_hint.yielded_type
+  if is_consistent_with(type_hint, Tuple[Any, ...]):
+    return Union[type_hint.tuple_types]
+  if is_consistent_with(type_hint, Iterable[Any]):
+    return type_hint.inner_type
+  raise ValueError('%s is not iterable' % type_hint)
+
+
+def coerce_to_kv_type(element_type, label=None, side_input_producer=None):
   """Attempts to coerce element_type to a compatible kv type.
 
   Raises an error on failure.
   """
+  if side_input_producer:
+    consumer = 'side-input of %r (producer: %r)' % (label,
+                                                    side_input_producer)
+  else:
+    consumer = '%r' % label
+
   # If element_type is not specified, then treat it as `Any`.
   if not element_type:
     return KV[Any, Any]
@@ -1148,8 +1212,8 @@ def coerce_to_kv_type(element_type, label=None):
       return element_type
     else:
       raise ValueError(
-          "Tuple input to %r must be have two components. "
-          "Found %s." % (label, element_type))
+          "Tuple input to %s must have two components. "
+          "Found %s." % (consumer, element_type))
   elif isinstance(element_type, AnyTypeConstraint):
     # `Any` type needs to be replaced with a KV[Any, Any] to
     # satisfy the KV form.
@@ -1163,5 +1227,5 @@ def coerce_to_kv_type(element_type, label=None):
   else:
     # TODO: Possibly handle other valid types.
     raise ValueError(
-        "Input to %r must be compatible with KV[Any, Any]. "
-        "Found %s." % (label, element_type))
+        "Input to %s must be compatible with KV[Any, Any]. "
+        "Found %s." % (consumer, element_type))

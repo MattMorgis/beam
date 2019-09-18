@@ -20,6 +20,7 @@
 from __future__ import absolute_import
 
 import json
+import sys
 import unittest
 from builtins import object
 from builtins import range
@@ -34,6 +35,7 @@ from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.pipeline import AppliedPTransform
 from apache_beam.pipeline import Pipeline
 from apache_beam.portability import common_urns
+from apache_beam.portability.api import beam_runner_api_pb2
 from apache_beam.pvalue import PCollection
 from apache_beam.runners import DataflowRunner
 from apache_beam.runners import TestDataflowRunner
@@ -174,6 +176,23 @@ class DataflowRunnerTest(unittest.TestCase):
     self.assertTrue(
         isinstance(create_runner('TestDataflowRunner'),
                    TestDataflowRunner))
+
+  def test_environment_override_translation(self):
+    self.default_properties.append('--experiments=beam_fn_api')
+    self.default_properties.append('--worker_harness_container_image=FOO')
+    remote_runner = DataflowRunner()
+    p = Pipeline(remote_runner,
+                 options=PipelineOptions(self.default_properties))
+    (p | ptransform.Create([1, 2, 3])  # pylint: disable=expression-not-assigned
+     | 'Do' >> ptransform.FlatMap(lambda x: [(x, x)])
+     | ptransform.GroupByKey())
+    p.run()
+    self.assertEqual(
+        list(remote_runner.proto_pipeline.components.environments.values()),
+        [beam_runner_api_pb2.Environment(
+            urn=common_urns.environments.DOCKER.urn,
+            payload=beam_runner_api_pb2.DockerPayload(
+                container_image='FOO').SerializeToString())])
 
   def test_remote_runner_translation(self):
     remote_runner = DataflowRunner()
@@ -443,6 +462,30 @@ class DataflowRunnerTest(unittest.TestCase):
         remote_runner.job.options.view_as(DebugOptions).experiments)
     self.assertIn('beam_fn_api', experiments_for_job)
     self.assertIn('use_staged_dataflow_worker_jar', experiments_for_job)
+
+  def test_use_fastavro_experiment_is_added_on_py3_and_onwards(self):
+    remote_runner = DataflowRunner()
+
+    p = Pipeline(remote_runner, PipelineOptions(self.default_properties))
+    p | ptransform.Create([1])  # pylint: disable=expression-not-assigned
+    p.run()
+
+    self.assertEqual(
+        sys.version_info[0] > 2,
+        remote_runner.job.options.view_as(DebugOptions).lookup_experiment(
+            'use_fastavro', False))
+
+  def test_use_fastavro_experiment_is_not_added_when_use_avro_is_present(self):
+    remote_runner = DataflowRunner()
+    self.default_properties.append('--experiment=use_avro')
+
+    p = Pipeline(remote_runner, PipelineOptions(self.default_properties))
+    p | ptransform.Create([1])  # pylint: disable=expression-not-assigned
+    p.run()
+
+    debug_options = remote_runner.job.options.view_as(DebugOptions)
+
+    self.assertFalse(debug_options.lookup_experiment('use_fastavro', False))
 
 
 if __name__ == '__main__':

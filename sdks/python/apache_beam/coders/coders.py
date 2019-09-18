@@ -23,6 +23,7 @@ from __future__ import absolute_import
 
 import base64
 import sys
+import typing
 from builtins import object
 
 import google.protobuf.wrappers_pb2
@@ -30,6 +31,7 @@ from future.moves import pickle
 from past.builtins import unicode
 
 from apache_beam.coders import coder_impl
+from apache_beam.coders.avro_record import AvroRecord
 from apache_beam.portability import common_urns
 from apache_beam.portability import python_urns
 from apache_beam.portability.api import beam_runner_api_pb2
@@ -57,9 +59,9 @@ except ImportError:
 
 
 __all__ = ['Coder',
-           'BytesCoder', 'DillCoder', 'FastPrimitivesCoder', 'FloatCoder',
-           'IterableCoder', 'PickleCoder', 'ProtoCoder', 'SingletonCoder',
-           'StrUtf8Coder', 'TimestampCoder', 'TupleCoder',
+           'AvroCoder', 'BytesCoder', 'DillCoder', 'FastPrimitivesCoder',
+           'FloatCoder', 'IterableCoder', 'PickleCoder', 'ProtoCoder',
+           'SingletonCoder', 'StrUtf8Coder', 'TimestampCoder', 'TupleCoder',
            'TupleSequenceCoder', 'VarIntCoder', 'WindowedValueCoder']
 
 
@@ -263,27 +265,31 @@ class Coder(object):
   def to_runner_api(self, context):
     urn, typed_param, components = self.to_runner_api_parameter(context)
     return beam_runner_api_pb2.Coder(
-        spec=beam_runner_api_pb2.SdkFunctionSpec(
-            environment_id=(
-                context.default_environment_id() if context else None),
-            spec=beam_runner_api_pb2.FunctionSpec(
-                urn=urn,
-                payload=typed_param
-                if isinstance(typed_param, (bytes, type(None)))
-                else typed_param.SerializeToString())),
+        spec=beam_runner_api_pb2.FunctionSpec(
+            urn=urn,
+            payload=typed_param
+            if isinstance(typed_param, (bytes, type(None)))
+            else typed_param.SerializeToString()),
         component_coder_ids=[context.coders.get_id(c) for c in components])
 
   @classmethod
   def from_runner_api(cls, coder_proto, context):
-    """Converts from an SdkFunctionSpec to a Fn object.
+    """Converts from an FunctionSpec to a Fn object.
 
     Prefer registering a urn with its parameter type and constructor.
     """
-    parameter_type, constructor = cls._known_urns[coder_proto.spec.spec.urn]
-    return constructor(
-        proto_utils.parse_Bytes(coder_proto.spec.spec.payload, parameter_type),
-        [context.coders.get_by_id(c) for c in coder_proto.component_coder_ids],
-        context)
+    parameter_type, constructor = cls._known_urns[coder_proto.spec.urn]
+    try:
+      return constructor(
+          proto_utils.parse_Bytes(
+              coder_proto.spec.payload, parameter_type),
+          [context.coders.get_by_id(c)
+           for c in coder_proto.component_coder_ids],
+          context)
+    except Exception:
+      if context.allow_proto_holders:
+        return RunnerAPICoderHolder(coder_proto)
+      raise
 
   def to_runner_api_parameter(self, context):
     return (
@@ -593,7 +599,7 @@ class PickleCoder(_PickleCoderBase):
     return DeterministicFastPrimitivesCoder(self, step_label)
 
   def to_type_hint(self):
-    return typehints.Any
+    return typing.Any
 
 
 class DillCoder(_PickleCoderBase):
@@ -627,7 +633,7 @@ class DeterministicFastPrimitivesCoder(FastCoder):
     return self
 
   def to_type_hint(self):
-    return typehints.Any
+    return typing.Any
 
 
 class FastPrimitivesCoder(FastCoder):
@@ -652,7 +658,7 @@ class FastPrimitivesCoder(FastCoder):
       return DeterministicFastPrimitivesCoder(self, step_label)
 
   def to_type_hint(self):
-    return typehints.Any
+    return typing.Any
 
   def as_cloud_object(self, coders_context=None, is_pair_like=True):
     value = super(FastCoder, self).as_cloud_object(coders_context)
@@ -744,6 +750,9 @@ class ProtoCoder(FastCoder):
     # a Map.
     return False
 
+  def as_deterministic_coder(self, step_label, error_message=None):
+    return DeterministicProtoCoder(self.proto_message_type)
+
   def __eq__(self, other):
     return (type(self) == type(other)
             and self.proto_message_type == other.proto_message_type)
@@ -758,6 +767,59 @@ class ProtoCoder(FastCoder):
     else:
       raise ValueError(('Expected a subclass of google.protobuf.message.Message'
                         ', but got a %s' % typehint))
+
+
+class DeterministicProtoCoder(ProtoCoder):
+  """A deterministic Coder for Google Protocol Buffers.
+
+  It supports both Protocol Buffers syntax versions 2 and 3. However,
+  the runtime version of the python protobuf library must exactly match the
+  version of the protoc compiler what was used to generate the protobuf
+  messages.
+  """
+
+  def _create_impl(self):
+    return coder_impl.DeterministicProtoCoderImpl(self.proto_message_type)
+
+  def is_deterministic(self):
+    return True
+
+  def as_deterministic_coder(self, step_label, error_message=None):
+    return self
+
+
+AVRO_CODER_URN = "beam:coder:avro:v1"
+
+
+class AvroCoder(FastCoder):
+  """A coder used for AvroRecord values."""
+
+  def __init__(self, schema):
+    self.schema = schema
+
+  def _create_impl(self):
+    return coder_impl.AvroCoderImpl(self.schema)
+
+  def is_deterministic(self):
+    # TODO(BEAM-7903): need to confirm if it's deterministic
+    return False
+
+  def __eq__(self, other):
+    return (type(self) == type(other)
+            and self.schema == other.schema)
+
+  def __hash__(self):
+    return hash(self.schema)
+
+  def to_type_hint(self):
+    return AvroRecord
+
+  def to_runner_api_parameter(self, context):
+    return AVRO_CODER_URN, self.schema, ()
+
+  @Coder.register_urn(AVRO_CODER_URN, bytes)
+  def from_runner_api_parameter(payload, unused_components, unused_context):
+    return AvroCoder(payload)
 
 
 class TupleCoder(FastCoder):
@@ -1140,3 +1202,25 @@ class StateBackedIterableCoder(FastCoder):
         read_state=context.iterable_state_read,
         write_state=context.iterable_state_write,
         write_state_threshold=int(payload))
+
+
+class RunnerAPICoderHolder(Coder):
+  """A `Coder` that holds a runner API `Coder` proto.
+
+  This is used for coders for which corresponding objects cannot be
+  initialized in Python SDK. For example, coders for remote SDKs that may
+  be available in Python SDK transform graph when expanding a cross-language
+  transform.
+  """
+
+  def __init__(self, proto):
+    self._proto = proto
+
+  def proto(self):
+    return self._proto
+
+  def to_runner_api(self, context):
+    return self._proto
+
+  def to_type_hint(self):
+    return typing.Any

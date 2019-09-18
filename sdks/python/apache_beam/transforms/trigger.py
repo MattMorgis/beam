@@ -67,8 +67,7 @@ __all__ = [
 
 
 class AccumulationMode(object):
-  """Controls what to do with data when a trigger fires multiple times.
-  """
+  """Controls what to do with data when a trigger fires multiple times."""
   DISCARDING = beam_runner_api_pb2.AccumulationMode.DISCARDING
   ACCUMULATING = beam_runner_api_pb2.AccumulationMode.ACCUMULATING
   # TODO(robertwb): Provide retractions of previous outputs.
@@ -78,10 +77,7 @@ class AccumulationMode(object):
 class _StateTag(with_metaclass(ABCMeta, object)):
   """An identifier used to store and retrieve typed, combinable state.
 
-  The given tag must be unique for this stage.  If CombineFn is None then
-  all elements will be returned as a list, otherwise the given CombineFn
-  will be applied (possibly incrementally and eagerly) when adding elements.
-  """
+  The given tag must be unique for this step."""
 
   def __init__(self, tag):
     self.tag = tag
@@ -97,8 +93,21 @@ class _ValueStateTag(_StateTag):
     return _ValueStateTag(prefix + self.tag)
 
 
+class _SetStateTag(_StateTag):
+  """StateTag pointing to an element."""
+
+  def __repr__(self):
+    return 'SetStateTag({tag})'.format(tag=self.tag)
+
+  def with_prefix(self, prefix):
+    return _SetStateTag(prefix + self.tag)
+
+
 class _CombiningValueStateTag(_StateTag):
-  """StateTag pointing to an element, accumulated with a combiner."""
+  """StateTag pointing to an element, accumulated with a combiner.
+
+  The given tag must be unique for this step. The given CombineFn will be
+  applied (possibly incrementally and eagerly) when adding elements."""
 
   # TODO(robertwb): Also store the coder (perhaps extracted from the combine_fn)
   def __init__(self, tag, combine_fn):
@@ -297,6 +306,7 @@ class AfterProcessingTime(TriggerFn):
   """
 
   def __init__(self, delay=0):
+    """Initialize a processing time trigger with a delay in seconds."""
     self.delay = delay
 
   def __repr__(self):
@@ -327,12 +337,12 @@ class AfterProcessingTime(TriggerFn):
             proto.after_processing_time
             .timestamp_transforms[0]
             .delay
-            .delay_millis))
+            .delay_millis) // 1000)
 
   def to_runner_api(self, context):
     delay_proto = beam_runner_api_pb2.TimestampTransform(
         delay=beam_runner_api_pb2.TimestampTransform.Delay(
-            delay_millis=self.delay))
+            delay_millis=self.delay * 1000))
     return beam_runner_api_pb2.Trigger(
         after_processing_time=beam_runner_api_pb2.Trigger.AfterProcessingTime(
             timestamp_transforms=[delay_proto]))
@@ -865,6 +875,8 @@ class MergeableStateAdapter(SimpleState):
           original_tag.combine_fn.merge_accumulators(values))
     elif isinstance(tag, _ListStateTag):
       return [v for vs in values for v in vs]
+    elif isinstance(tag, _SetStateTag):
+      return {v for vs in values for v in vs}
     elif isinstance(tag, _WatermarkHoldStateTag):
       return tag.timestamp_combiner_impl.combine_all(values)
     else:
@@ -1226,6 +1238,8 @@ class InMemoryUnmergedState(UnmergedState):
       self.state[window][tag.tag].append(value)
     elif isinstance(tag, _ListStateTag):
       self.state[window][tag.tag].append(value)
+    elif isinstance(tag, _SetStateTag):
+      self.state[window][tag.tag].append(value)
     elif isinstance(tag, _WatermarkHoldStateTag):
       self.state[window][tag.tag].append(value)
     else:
@@ -1238,6 +1252,8 @@ class InMemoryUnmergedState(UnmergedState):
     elif isinstance(tag, _CombiningValueStateTag):
       return tag.combine_fn.apply(values)
     elif isinstance(tag, _ListStateTag):
+      return values
+    elif isinstance(tag, _SetStateTag):
       return values
     elif isinstance(tag, _WatermarkHoldStateTag):
       return tag.timestamp_combiner_impl.combine_all(values)

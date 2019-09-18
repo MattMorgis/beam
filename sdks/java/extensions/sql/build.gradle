@@ -27,15 +27,33 @@ applyJavaNature(
   disableLintWarnings: ['dep-ann'],
   testShadowJar: true,
   enableStrictDependencies: true,
-  shadowClosure: DEFAULT_SHADOW_CLOSURE << {
+  shadowClosure: {
     dependencies {
+      include(dependency(library.java.guava))
       include(dependency(library.java.protobuf_java))
       include(dependency(library.java.protobuf_java_util))
       include(dependency("org.apache.calcite:.*"))
       include(dependency("org.apache.calcite.avatica:.*"))
       include(dependency("org.codehaus.janino:.*"))
+      include(dependency("com.google.zetasql:.*"))
     }
+    // guava uses the com.google.common and com.google.thirdparty package namespaces
+    relocate("com.google.common", project.getJavaRelocatedPath("com.google.common")) {
+      // com.google.common is too generic, need to exclude guava-testlib
+      exclude "com.google.common.collect.testing.**"
+      exclude "com.google.common.escape.testing.**"
+      exclude "com.google.common.testing.**"
+      exclude "com.google.common.util.concurrent.testing.**"
+    }
+    relocate "com.google.cloud", getJavaRelocatedPath("com.google.cloud")
+    relocate "com.google.logging", getJavaRelocatedPath("com.google.logging")
+    relocate "com.google.longrunning", getJavaRelocatedPath("com.google.longrunning")
+    relocate "com.google.rpc", getJavaRelocatedPath("com.google.rpc")
+
+    relocate "com.google.thirdparty", project.getJavaRelocatedPath("com.google.thirdparty")
+
     relocate "com.google.protobuf", getJavaRelocatedPath("com.google.protobuf")
+    relocate "com.google.zetasql", getJavaRelocatedPath("com.google.zetasql")
     relocate "org.apache.calcite", getJavaRelocatedPath("org.apache.calcite")
 
   // Looking up the compiler factory in Calcite depends on having a properties
@@ -58,23 +76,26 @@ configurations {
   fmppTemplates
 }
 
-def calcite_version = "1.19.0"
-def avatica_version = "1.13.0"
-def hive_version = "2.1.0"
-def netty_version = "4.1.30.Final"
+def calcite_version = "1.20.0"
+def avatica_version = "1.15.0"
+def zetasql_version = "2019.07.1"
 
 dependencies {
   javacc "net.java.dev.javacc:javacc:4.0"
   fmppTask "com.googlecode.fmpp-maven-plugin:fmpp-maven-plugin:1.0"
   fmppTask "org.freemarker:freemarker:2.3.28"
   fmppTemplates "org.apache.calcite:calcite-core:$calcite_version"
-  shadow library.java.vendored_guava_20_0 // Internal use
+  shadow library.java.vendored_guava_26_0_jre // Internal use
   compile library.java.guava // Interfaces with Calcite use this
   compile "org.apache.calcite:calcite-core:$calcite_version"
   compile "org.apache.calcite:calcite-linq4j:$calcite_version"
   compile "org.apache.calcite.avatica:avatica-core:$avatica_version"
-  shadow project(path: ":beam-sdks-java-core", configuration: "shadow")
-  shadow project(path: ":beam-sdks-java-extensions-join-library", configuration: "shadow")
+  compile "com.google.api.grpc:proto-google-common-protos:1.12.0" // Interfaces with ZetaSQL use this
+  compile "com.google.zetasql:zetasql-jni-channel:$zetasql_version"
+  compile "com.google.zetasql:zetasql-client:$zetasql_version"
+  compile "com.google.zetasql:zetasql-types:$zetasql_version"
+  shadow project(path: ":sdks:java:core", configuration: "shadow")
+  shadow project(":sdks:java:extensions:join-library")
   shadow library.java.slf4j_api
   shadow library.java.commons_codec
   shadow library.java.commons_csv
@@ -82,35 +103,30 @@ dependencies {
   shadow library.java.jackson_databind
   shadow library.java.jackson_dataformat_yaml
   shadow library.java.joda_time
+  shadow library.java.protobuf_java
+  shadow library.java.protobuf_java_util
   shadow "com.alibaba:fastjson:1.2.49"
   shadow "com.jayway.jsonpath:json-path:2.4.0"
-  shadow project(path: ":beam-runners-direct-java", configuration: "shadow")
-  provided project(path: ":beam-sdks-java-io-hcatalog", configuration: "shadow")
-  provided project(path: ":beam-sdks-java-io-kafka", configuration: "shadow")
-  provided project(path: ":beam-sdks-java-io-google-cloud-platform", configuration: "shadow")
+  shadow project(path: ":runners:direct-java", configuration: "shadow")
+  provided project(":sdks:java:io:kafka")
+  provided project(":sdks:java:io:google-cloud-platform")
+  provided project(":sdks:java:io:parquet")
   provided library.java.kafka_clients
-  shadowTest library.java.slf4j_jdk14
   shadowTest library.java.junit
   shadowTest library.java.hamcrest_core
   shadowTest library.java.hamcrest_library
   shadowTest library.java.mockito_core
   shadowTest library.java.quickcheck_core
-
-  // Needed for HCatalogTableProvider tests,
-  // they use HCat* types
-  shadowTest "io.netty:netty-all:$netty_version"
-  shadowTest("org.apache.hive.hcatalog:hive-hcatalog-core:$hive_version") {
-    // Hive brings full Calcite 1.6 + Avatica with JDBC driver which
-    // gets registered and gets started instead of ours,
-    // and a ton of other stuff.
-    exclude group: "org.apache.calcite", module:"calcite-avatica"
-    exclude group: "com.google.guava", module: "guava"
-    exclude group: "com.google.protobuf", module: "protobuf-java"
-  }
+  shadowTestRuntimeClasspath library.java.slf4j_jdk14
 
   // Dependencies that we don't directly reference
   permitUnusedDeclared "com.jayway.jsonpath:json-path:2.4.0"
+  permitUnusedDeclared "net.jcip:jcip-annotations:1.0"
   permitUnusedDeclared library.java.jackson_dataformat_yaml
+
+  permitUnusedDeclared "com.google.api.grpc:proto-google-common-protos:1.12.0"
+  permitUnusedDeclared "com.google.zetasql:zetasql-jni-channel:2019.07.1"
+  permitUnusedDeclared "com.google.protobuf:protobuf-java-util:3.6.0"
 
   // Dependencies that are bundled in when we bundle Calcite
   permitUsedUndeclared "org.codehaus.janino:janino:3.0.11"
@@ -119,7 +135,8 @@ dependencies {
   // Dependencies where one or the other appears "used" depending on classpath,
   // but it doesn't matter which is used
   permitUsedUndeclared "com.google.code.findbugs:jsr305:3.0.2"
-  permitUnusedDeclared "net.jcip:jcip-annotations:1.0"
+  permitUsedUndeclared "org.apache.avro:avro:1.8.2"
+
 }
 
 // Copy Caclcite templates and our own template into the build directory
@@ -188,6 +205,19 @@ task runPojoExample(type: JavaExec) {
   args = ["--runner=DirectRunner"]
 }
 
+task runZetaSQLTest(type: Test) {
+  // Disable Gradle cache (it should not be used because the IT's won't run).
+  outputs.upToDateWhen { false }
+
+  include '**/*TestZetaSQL.class'
+  classpath = project(":sdks:java:extensions:sql")
+          .sourceSets
+          .test
+          .runtimeClasspath
+  testClassesDirs = files(project(":sdks:java:extensions:sql").sourceSets.test.output.classesDirs)
+  useJUnit { }
+}
+
 task integrationTest(type: Test) {
   group = "Verification"
   def gcpProject = project.findProperty('gcpProject') ?: 'apache-beam-testing'
@@ -204,13 +234,13 @@ task integrationTest(type: Test) {
   systemProperty "beamTestPipelineOptions", JsonOutput.toJson(pipelineOptions)
 
   include '**/*IT.class'
+  exclude '**/KafkaCSVTableIT.java'
   maxParallelForks 4
-  classpath = project(":beam-sdks-java-extensions-sql")
+  classpath = project(":sdks:java:extensions:sql")
           .sourceSets
           .test
           .runtimeClasspath
-          .filter { it.name != "hive-exec-${hive_version}.jar" }
-  testClassesDirs = files(project(":beam-sdks-java-extensions-sql").sourceSets.test.output.classesDirs)
+  testClassesDirs = files(project(":sdks:java:extensions:sql").sourceSets.test.output.classesDirs)
   useJUnit { }
 }
 

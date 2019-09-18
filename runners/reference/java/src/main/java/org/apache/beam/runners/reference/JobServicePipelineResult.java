@@ -30,7 +30,7 @@ import org.apache.beam.model.jobmanagement.v1.JobApi.GetJobStateResponse;
 import org.apache.beam.model.jobmanagement.v1.JobServiceGrpc.JobServiceBlockingStub;
 import org.apache.beam.sdk.PipelineResult;
 import org.apache.beam.sdk.metrics.MetricResults;
-import org.apache.beam.vendor.grpc.v1p13p1.com.google.protobuf.ByteString;
+import org.apache.beam.vendor.grpc.v1p21p0.com.google.protobuf.ByteString;
 import org.joda.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +44,7 @@ class JobServicePipelineResult implements PipelineResult, AutoCloseable {
   private final ByteString jobId;
   private final CloseableResource<JobServiceBlockingStub> jobService;
   @Nullable private State terminationState;
-  @Nullable private Runnable cleanup;
+  @Nullable private final Runnable cleanup;
 
   JobServicePipelineResult(
       ByteString jobId, CloseableResource<JobServiceBlockingStub> jobService, Runnable cleanup) {

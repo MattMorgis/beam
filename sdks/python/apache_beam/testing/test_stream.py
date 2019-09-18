@@ -135,7 +135,7 @@ class TestStream(PTransform):
   def expand(self, pbegin):
     assert isinstance(pbegin, pvalue.PBegin)
     self.pipeline = pbegin.pipeline
-    return pvalue.PCollection(self.pipeline)
+    return pvalue.PCollection(self.pipeline, is_bounded=False)
 
   def _infer_output_coder(self, input_type=None, input_coder=None):
     return self.coder
@@ -194,7 +194,7 @@ class TestStream(PTransform):
     return self
 
   def advance_watermark_to_infinity(self):
-    """Advance the watermark to the end of time."""
+    """Advance the watermark to the end of time, completing this TestStream."""
     self.advance_watermark_to(timestamp.MAX_TIMESTAMP)
     return self
 

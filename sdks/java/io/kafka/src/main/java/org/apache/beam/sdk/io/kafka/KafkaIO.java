@@ -17,9 +17,9 @@
  */
 package org.apache.beam.sdk.io.kafka;
 
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkArgument;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkNotNull;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkState;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkState;
 
 import com.google.auto.service.AutoService;
 import com.google.auto.value.AutoValue;
@@ -64,11 +64,10 @@ import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PBegin;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PDone;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.annotations.VisibleForTesting;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Charsets;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Joiner;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableList;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.annotations.VisibleForTesting;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Joiner;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableList;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -116,7 +115,7 @@ import org.slf4j.LoggerFactory;
  *
  *      // you can further customize KafkaConsumer used to read the records by adding more
  *      // settings for ConsumerConfig. e.g :
- *      .updateConsumerProperties(ImmutableMap.of("group.id", "my_beam_app_1"))
+ *      .withConsumerConfigUpdates(ImmutableMap.of("group.id", "my_beam_app_1"))
  *
  *      // set event times and watermark based on 'LogAppendTime'. To provide a custom
  *      // policy see withTimestampPolicyFactory(). withProcessingTime() is the default.
@@ -157,7 +156,7 @@ import org.slf4j.LoggerFactory;
  * <p>When the pipeline starts for the first time, or without any checkpoint, the source starts
  * consuming from the <em>latest</em> offsets. You can override this behavior to consume from the
  * beginning by setting appropriate appropriate properties in {@link ConsumerConfig}, through {@link
- * Read#updateConsumerProperties(Map)}. You can also enable offset auto_commit in Kafka to resume
+ * Read#withConsumerConfigUpdates(Map)}. You can also enable offset auto_commit in Kafka to resume
  * from last committed.
  *
  * <p>In summary, KafkaIO.read follows below sequence to set initial offset:<br>
@@ -185,7 +184,7 @@ import org.slf4j.LoggerFactory;
  *
  *      // You can further customize KafkaProducer used to write the records by adding more
  *      // settings for ProducerConfig. e.g, to enable compression :
- *      .updateProducerProperties(ImmutableMap.of("compression.type", "gzip"))
+ *      .withProducerConfigUpdates(ImmutableMap.of("compression.type", "gzip"))
  *
  *      // You set publish timestamp for the Kafka records.
  *      .withInputTimestamp() // element timestamp is used while publishing to Kafka
@@ -359,6 +358,7 @@ public class KafkaIO {
 
     abstract Builder<K, V> toBuilder();
 
+    @Experimental
     @AutoValue.Builder
     abstract static class Builder<K, V>
         implements ExternalTransformBuilder<External.Configuration, PBegin, PCollection<KV<K, V>>> {
@@ -401,26 +401,22 @@ public class KafkaIO {
       public PTransform<PBegin, PCollection<KV<K, V>>> buildExternal(
           External.Configuration config) {
         ImmutableList.Builder<String> listBuilder = ImmutableList.builder();
-        for (byte[] topic : config.topics) {
-          listBuilder.add(utf8String(topic));
+        for (String topic : config.topics) {
+          listBuilder.add(topic);
         }
         setTopics(listBuilder.build());
 
-        String keyDeserializerClassName = utf8String(config.keyDeserializer);
-        Class keyDeserializer = resolveClass(keyDeserializerClassName);
+        Class keyDeserializer = resolveClass(config.keyDeserializer);
         setKeyDeserializer(keyDeserializer);
         setKeyCoder(resolveCoder(keyDeserializer));
 
-        String valueDeserializerClassName = utf8String(config.valueDeserializer);
-        Class valueDeserializer = resolveClass(valueDeserializerClassName);
+        Class valueDeserializer = resolveClass(config.valueDeserializer);
         setValueDeserializer(valueDeserializer);
         setValueCoder(resolveCoder(valueDeserializer));
 
         Map<String, Object> consumerConfig = new HashMap<>();
-        for (KV<byte[], byte[]> kv : config.consumerConfig) {
-          String key = utf8String(kv.getKey());
-          String value = utf8String(kv.getValue());
-          consumerConfig.put(key, value);
+        for (KV<String, String> kv : config.consumerConfig) {
+          consumerConfig.put(kv.getKey(), kv.getValue());
         }
         // Key and Value Deserializers always have to be in the config.
         consumerConfig.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, keyDeserializer.getName());
@@ -458,24 +454,13 @@ public class KafkaIO {
         }
         throw new RuntimeException("Couldn't resolve coder for Deserializer: " + deserializer);
       }
-
-      private static Class resolveClass(String className) {
-        try {
-          return Class.forName(className);
-        } catch (ClassNotFoundException e) {
-          throw new RuntimeException("Could not find deserializer class: " + className);
-        }
-      }
-
-      private static String utf8String(byte[] bytes) {
-        return new String(bytes, Charsets.UTF_8);
-      }
     }
 
     /**
      * Exposes {@link KafkaIO.TypedWithoutMetadata} as an external transform for cross-language
      * usage.
      */
+    @Experimental
     @AutoService(ExternalTransformRegistrar.class)
     public static class External implements ExternalTransformRegistrar {
 
@@ -486,28 +471,28 @@ public class KafkaIO {
         return ImmutableMap.of(URN, AutoValue_KafkaIO_Read.Builder.class);
       }
 
-      /** Parameters class to expose the transform to an external SDK. */
+      /** Parameters class to expose the Read transform to an external SDK. */
       public static class Configuration {
 
         // All byte arrays are UTF-8 encoded strings
-        private Iterable<KV<byte[], byte[]>> consumerConfig;
-        private Iterable<byte[]> topics;
-        private byte[] keyDeserializer;
-        private byte[] valueDeserializer;
+        private Iterable<KV<String, String>> consumerConfig;
+        private Iterable<String> topics;
+        private String keyDeserializer;
+        private String valueDeserializer;
 
-        public void setConsumerConfig(Iterable<KV<byte[], byte[]>> consumerConfig) {
+        public void setConsumerConfig(Iterable<KV<String, String>> consumerConfig) {
           this.consumerConfig = consumerConfig;
         }
 
-        public void setTopics(Iterable<byte[]> topics) {
+        public void setTopics(Iterable<String> topics) {
           this.topics = topics;
         }
 
-        public void setKeyDeserializer(byte[] keyDeserializer) {
+        public void setKeyDeserializer(String keyDeserializer) {
           this.keyDeserializer = keyDeserializer;
         }
 
-        public void setValueDeserializer(byte[] valueDeserializer) {
+        public void setValueDeserializer(String valueDeserializer) {
           this.valueDeserializer = valueDeserializer;
         }
       }
@@ -515,7 +500,7 @@ public class KafkaIO {
 
     /** Sets the bootstrap servers for the Kafka consumer. */
     public Read<K, V> withBootstrapServers(String bootstrapServers) {
-      return updateConsumerProperties(
+      return withConsumerConfigUpdates(
           ImmutableMap.of(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers));
     }
 
@@ -610,7 +595,12 @@ public class KafkaIO {
       return toBuilder().setConsumerFactoryFn(consumerFactoryFn).build();
     }
 
-    /** Update consumer configuration with new properties. */
+    /**
+     * Update consumer configuration with new properties.
+     *
+     * @deprecated as of version 2.13. Use {@link #withConsumerConfigUpdates(Map)} instead
+     */
+    @Deprecated
     public Read<K, V> updateConsumerProperties(Map<String, Object> configUpdates) {
       Map<String, Object> config =
           updateKafkaProperties(getConsumerConfig(), IGNORED_CONSUMER_PROPERTIES, configUpdates);
@@ -771,7 +761,7 @@ public class KafkaIO {
      * read committed messages. See JavaDoc for {@link KafkaConsumer} for more description.
      */
     public Read<K, V> withReadCommitted() {
-      return updateConsumerProperties(ImmutableMap.of("isolation.level", "read_committed"));
+      return withConsumerConfigUpdates(ImmutableMap.of("isolation.level", "read_committed"));
     }
 
     /**
@@ -802,6 +792,24 @@ public class KafkaIO {
      */
     public Read<K, V> withOffsetConsumerConfigOverrides(Map<String, Object> offsetConsumerConfig) {
       return toBuilder().setOffsetConsumerConfig(offsetConsumerConfig).build();
+    }
+
+    /**
+     * Update configuration for the backend main consumer. Note that the default consumer properties
+     * will not be completely overridden. This method only updates the value which has the same key.
+     *
+     * <p>In {@link KafkaIO#read()}, there're two consumers running in the backend actually:<br>
+     * 1. the main consumer, which reads data from kafka;<br>
+     * 2. the secondary offset consumer, which is used to estimate backlog, by fetching latest
+     * offset;<br>
+     *
+     * <p>By default, main consumer uses the configuration from {@link
+     * #DEFAULT_CONSUMER_PROPERTIES}.
+     */
+    public Read<K, V> withConsumerConfigUpdates(Map<String, Object> configUpdates) {
+      Map<String, Object> config =
+          updateKafkaProperties(getConsumerConfig(), IGNORED_CONSUMER_PROPERTIES, configUpdates);
+      return toBuilder().setConsumerConfig(config).build();
     }
 
     /** Returns a {@link PTransform} for PCollection of {@link KV}, dropping Kafka metatdata. */
@@ -1109,7 +1117,7 @@ public class KafkaIO {
      * bootstrapServers}.
      */
     public WriteRecords<K, V> withBootstrapServers(String bootstrapServers) {
-      return updateProducerProperties(
+      return withProducerConfigUpdates(
           ImmutableMap.of(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers));
     }
 
@@ -1138,8 +1146,23 @@ public class KafkaIO {
 
     /**
      * Adds the given producer properties, overriding old values of properties with the same key.
+     *
+     * @deprecated as of version 2.13. Use {@link #withProducerConfigUpdates(Map)} instead.
      */
+    @Deprecated
     public WriteRecords<K, V> updateProducerProperties(Map<String, Object> configUpdates) {
+      Map<String, Object> config =
+          updateKafkaProperties(getProducerConfig(), IGNORED_PRODUCER_PROPERTIES, configUpdates);
+      return toBuilder().setProducerConfig(config).build();
+    }
+
+    /**
+     * Update configuration for the producer. Note that the default producer properties will not be
+     * completely overridden. This method only updates the value which has the same key.
+     *
+     * <p>By default, the producer uses the configuration from {@link #DEFAULT_PRODUCER_PROPERTIES}.
+     */
+    public WriteRecords<K, V> withProducerConfigUpdates(Map<String, Object> configUpdates) {
       Map<String, Object> config =
           updateKafkaProperties(getProducerConfig(), IGNORED_PRODUCER_PROPERTIES, configUpdates);
       return toBuilder().setProducerConfig(config).build();
@@ -1324,13 +1347,77 @@ public class KafkaIO {
 
     abstract Builder<K, V> toBuilder();
 
+    @Experimental
     @AutoValue.Builder
-    abstract static class Builder<K, V> {
+    abstract static class Builder<K, V>
+        implements ExternalTransformBuilder<External.Configuration, PCollection<KV<K, V>>, PDone> {
       abstract Builder<K, V> setTopic(String topic);
 
       abstract Builder<K, V> setWriteRecordsTransform(WriteRecords<K, V> transform);
 
       abstract Write<K, V> build();
+
+      @Override
+      public PTransform<PCollection<KV<K, V>>, PDone> buildExternal(
+          External.Configuration configuration) {
+        setTopic(configuration.topic);
+
+        Map<String, Object> producerConfig = new HashMap<>();
+        for (KV<String, String> kv : configuration.producerConfig) {
+          producerConfig.put(kv.getKey(), kv.getValue());
+        }
+        Class keySerializer = resolveClass(configuration.keySerializer);
+        Class valSerializer = resolveClass(configuration.valueSerializer);
+
+        WriteRecords<K, V> writeRecords =
+            KafkaIO.<K, V>writeRecords()
+                .withProducerConfigUpdates(producerConfig)
+                .withKeySerializer(keySerializer)
+                .withValueSerializer(valSerializer)
+                .withTopic(configuration.topic);
+        setWriteRecordsTransform(writeRecords);
+
+        return build();
+      }
+    }
+
+    /** Exposes {@link KafkaIO.Write} as an external transform for cross-language usage. */
+    @Experimental
+    @AutoService(ExternalTransformRegistrar.class)
+    public static class External implements ExternalTransformRegistrar {
+
+      public static final String URN = "beam:external:java:kafka:write:v1";
+
+      @Override
+      public Map<String, Class<? extends ExternalTransformBuilder>> knownBuilders() {
+        return ImmutableMap.of(URN, AutoValue_KafkaIO_Write.Builder.class);
+      }
+
+      /** Parameters class to expose the Write transform to an external SDK. */
+      public static class Configuration {
+
+        // All byte arrays are UTF-8 encoded strings
+        private Iterable<KV<String, String>> producerConfig;
+        private String topic;
+        private String keySerializer;
+        private String valueSerializer;
+
+        public void setProducerConfig(Iterable<KV<String, String>> producerConfig) {
+          this.producerConfig = producerConfig;
+        }
+
+        public void setTopic(String topic) {
+          this.topic = topic;
+        }
+
+        public void setKeySerializer(String keySerializer) {
+          this.keySerializer = keySerializer;
+        }
+
+        public void setValueSerializer(String valueSerializer) {
+          this.valueSerializer = valueSerializer;
+        }
+      }
     }
 
     /** Used mostly to reduce using of boilerplate of wrapping {@link WriteRecords} methods. */
@@ -1429,10 +1516,25 @@ public class KafkaIO {
 
     /**
      * Adds the given producer properties, overriding old values of properties with the same key.
+     *
+     * @deprecated as of version 2.13. Use {@link #withProducerConfigUpdates(Map)} instead.
      */
+    @Deprecated
     public Write<K, V> updateProducerProperties(Map<String, Object> configUpdates) {
       return withWriteRecordsTransform(
           getWriteRecordsTransform().updateProducerProperties(configUpdates));
+    }
+
+    /**
+     * Update configuration for the producer. Note that the default producer properties will not be
+     * completely overridden. This method only updates the value which has the same key.
+     *
+     * <p>By default, the producer uses the configuration from {@link
+     * WriteRecords#DEFAULT_PRODUCER_PROPERTIES}.
+     */
+    public Write<K, V> withProducerConfigUpdates(Map<String, Object> configUpdates) {
+      return withWriteRecordsTransform(
+          getWriteRecordsTransform().withProducerConfigUpdates(configUpdates));
     }
 
     @Override
@@ -1579,5 +1681,13 @@ public class KafkaIO {
 
     throw new RuntimeException(
         String.format("Could not extract the Kafka Deserializer type from %s", deserializer));
+  }
+
+  private static Class resolveClass(String className) {
+    try {
+      return Class.forName(className);
+    } catch (ClassNotFoundException e) {
+      throw new RuntimeException("Could not find class: " + className);
+    }
   }
 }

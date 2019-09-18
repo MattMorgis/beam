@@ -44,12 +44,12 @@ import org.apache.beam.runners.core.construction.PTransformTranslation;
 import org.apache.beam.runners.core.construction.ReadTranslation;
 import org.apache.beam.runners.core.construction.RehydratedComponents;
 import org.apache.beam.runners.core.construction.RunnerPCollectionView;
-import org.apache.beam.runners.core.construction.UnboundedReadFromBoundedSource;
+import org.apache.beam.runners.core.construction.TestStreamTranslation;
 import org.apache.beam.runners.core.construction.WindowingStrategyTranslation;
 import org.apache.beam.runners.core.construction.graph.ExecutableStage;
 import org.apache.beam.runners.core.construction.graph.PipelineNode;
 import org.apache.beam.runners.core.construction.graph.QueryablePipeline;
-import org.apache.beam.runners.flink.translation.functions.FlinkExecutableStageContext;
+import org.apache.beam.runners.flink.translation.functions.FlinkExecutableStageContextFactory;
 import org.apache.beam.runners.flink.translation.functions.ImpulseSourceFunction;
 import org.apache.beam.runners.flink.translation.types.CoderTypeInformation;
 import org.apache.beam.runners.flink.translation.wrappers.streaming.DoFnOperator;
@@ -61,15 +61,19 @@ import org.apache.beam.runners.flink.translation.wrappers.streaming.WindowDoFnOp
 import org.apache.beam.runners.flink.translation.wrappers.streaming.WorkItemKeySelector;
 import org.apache.beam.runners.flink.translation.wrappers.streaming.io.DedupingOperator;
 import org.apache.beam.runners.flink.translation.wrappers.streaming.io.StreamingImpulseSource;
+import org.apache.beam.runners.flink.translation.wrappers.streaming.io.TestStreamSource;
 import org.apache.beam.runners.flink.translation.wrappers.streaming.io.UnboundedSourceWrapper;
 import org.apache.beam.runners.fnexecution.provisioning.JobInfo;
 import org.apache.beam.sdk.coders.ByteArrayCoder;
 import org.apache.beam.sdk.coders.Coder;
 import org.apache.beam.sdk.coders.IterableCoder;
 import org.apache.beam.sdk.coders.KvCoder;
+import org.apache.beam.sdk.coders.LengthPrefixCoder;
 import org.apache.beam.sdk.coders.VoidCoder;
 import org.apache.beam.sdk.io.UnboundedSource;
 import org.apache.beam.sdk.options.PipelineOptions;
+import org.apache.beam.sdk.testing.TestStream;
+import org.apache.beam.sdk.transforms.SerializableFunction;
 import org.apache.beam.sdk.transforms.ViewFn;
 import org.apache.beam.sdk.transforms.join.RawUnionValue;
 import org.apache.beam.sdk.transforms.join.UnionCoder;
@@ -81,17 +85,20 @@ import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.PCollectionViews;
 import org.apache.beam.sdk.values.TupleTag;
+import org.apache.beam.sdk.values.TypeDescriptor;
+import org.apache.beam.sdk.values.TypeDescriptors;
 import org.apache.beam.sdk.values.ValueWithRecordId;
 import org.apache.beam.sdk.values.WindowingStrategy;
-import org.apache.beam.vendor.grpc.v1p13p1.com.google.protobuf.InvalidProtocolBufferException;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.BiMap;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.HashMultiset;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableSet;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterables;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Lists;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Maps;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Sets;
+import org.apache.beam.vendor.grpc.v1p21p0.com.google.protobuf.InvalidProtocolBufferException;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.BiMap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.HashMultiset;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableSet;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterables;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Lists;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Maps;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Sets;
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
@@ -208,17 +215,22 @@ public class FlinkStreamingPortablePipelineTranslator
     // TODO Legacy transforms which need to be removed
     // Consider removing now that timers are supported
     translatorMap.put(STREAMING_IMPULSE_TRANSFORM_URN, this::translateStreamingImpulse);
-    // Remove once Reads can be wrapped in SDFs
-    translatorMap.put(PTransformTranslation.READ_TRANSFORM_URN, this::translateRead);
+    // Remove once unbounded Reads can be wrapped in SDFs
+    translatorMap.put(PTransformTranslation.READ_TRANSFORM_URN, this::translateUnboundedRead);
+
+    // For testing only
+    translatorMap.put(PTransformTranslation.TEST_STREAM_TRANSFORM_URN, this::translateTestStream);
 
     this.urnToTransformTranslator = translatorMap.build();
   }
 
   @Override
   public Set<String> knownUrns() {
-    // Do not expose Read as a known URN because we only want to support Read
-    // through the Java ExpansionService. We can't translate Reads for other
-    // languages.
+    // Do not expose Read as a known URN because PipelineTrimmer otherwise removes
+    // the subtransforms which are added in case of bounded reads. We only have a
+    // translator here for unbounded Reads which are native transforms which do not
+    // have subtransforms. Unbounded Reads are used by cross-language transforms, e.g.
+    // KafkaIO.
     return Sets.difference(
         urnToTransformTranslator.keySet(),
         ImmutableSet.of(PTransformTranslation.READ_TRANSFORM_URN));
@@ -436,7 +448,7 @@ public class FlinkStreamingPortablePipelineTranslator
   }
 
   @SuppressWarnings("unchecked")
-  private <T> void translateRead(
+  private <T> void translateUnboundedRead(
       String id, RunnerApi.Pipeline pipeline, StreamingTranslationContext context) {
     RunnerApi.PTransform transform = pipeline.getComponents().getTransformsOrThrow(id);
     String outputCollectionId = Iterables.getOnlyElement(transform.getOutputsMap().values());
@@ -448,15 +460,12 @@ public class FlinkStreamingPortablePipelineTranslator
       throw new RuntimeException("Failed to parse ReadPayload from transform", e);
     }
 
-    final ReadSourceTranslator<T> readTranslator;
-    if (payload.getIsBounded() == RunnerApi.IsBounded.Enum.BOUNDED) {
-      readTranslator = new ReadBoundedTranslator<>();
-    } else {
-      readTranslator = new ReadUnboundedTranslator<>();
-    }
+    Preconditions.checkState(
+        payload.getIsBounded() != RunnerApi.IsBounded.Enum.BOUNDED,
+        "Bounded reads should run inside an environment instead of being translated by the Runner.");
 
     DataStream<WindowedValue<T>> source =
-        readTranslator.translateRead(
+        translateUnboundedSource(
             transform.getUniqueName(),
             outputCollectionId,
             payload,
@@ -467,123 +476,61 @@ public class FlinkStreamingPortablePipelineTranslator
     context.addDataStream(outputCollectionId, source);
   }
 
-  interface ReadSourceTranslator<T> {
-    DataStream<WindowedValue<T>> translateRead(
-        String transformName,
-        String outputCollectionId,
-        RunnerApi.ReadPayload payload,
-        RunnerApi.Pipeline pipeline,
-        PipelineOptions pipelineOptions,
-        StreamExecutionEnvironment env);
-  }
+  private static <T> DataStream<WindowedValue<T>> translateUnboundedSource(
+      String transformName,
+      String outputCollectionId,
+      RunnerApi.ReadPayload payload,
+      RunnerApi.Pipeline pipeline,
+      PipelineOptions pipelineOptions,
+      StreamExecutionEnvironment env) {
 
-  private static class ReadBoundedTranslator<T> implements ReadSourceTranslator<T> {
+    final DataStream<WindowedValue<T>> source;
+    final DataStream<WindowedValue<ValueWithRecordId<T>>> nonDedupSource;
+    Coder<WindowedValue<T>> windowCoder =
+        instantiateCoder(outputCollectionId, pipeline.getComponents());
 
-    @Override
-    @SuppressWarnings("unchecked")
-    public DataStream<WindowedValue<T>> translateRead(
-        String transformName,
-        String outputCollectionId,
-        RunnerApi.ReadPayload payload,
-        RunnerApi.Pipeline pipeline,
-        PipelineOptions pipelineOptions,
-        StreamExecutionEnvironment env) {
-      Coder<WindowedValue<T>> windowCoder =
-          instantiateCoder(outputCollectionId, pipeline.getComponents());
-      TypeInformation<WindowedValue<T>> outputTypeInfo = new CoderTypeInformation<>(windowCoder);
+    TypeInformation<WindowedValue<T>> outputTypeInfo = new CoderTypeInformation<>(windowCoder);
 
-      UnboundedReadFromBoundedSource.BoundedToUnboundedSourceAdapter<?> convertedSource;
-      try {
-        convertedSource =
-            new UnboundedReadFromBoundedSource.BoundedToUnboundedSourceAdapter<>(
-                ReadTranslation.boundedSourceFromProto(payload));
-      } catch (IOException e) {
-        throw new RuntimeException("Failed to extract UnboundedSource from payload", e);
+    WindowingStrategy windowStrategy =
+        getWindowingStrategy(outputCollectionId, pipeline.getComponents());
+    TypeInformation<WindowedValue<ValueWithRecordId<T>>> withIdTypeInfo =
+        new CoderTypeInformation<>(
+            WindowedValue.getFullCoder(
+                ValueWithRecordId.ValueWithRecordIdCoder.of(
+                    ((WindowedValueCoder) windowCoder).getValueCoder()),
+                windowStrategy.getWindowFn().windowCoder()));
+
+    UnboundedSource unboundedSource = ReadTranslation.unboundedSourceFromProto(payload);
+
+    try {
+      int parallelism =
+          env.getMaxParallelism() > 0 ? env.getMaxParallelism() : env.getParallelism();
+      UnboundedSourceWrapper sourceWrapper =
+          new UnboundedSourceWrapper<>(
+              transformName, pipelineOptions, unboundedSource, parallelism);
+      nonDedupSource =
+          env.addSource(sourceWrapper)
+              .name(transformName)
+              .uid(transformName)
+              .returns(withIdTypeInfo);
+
+      if (unboundedSource.requiresDeduping()) {
+        source =
+            nonDedupSource
+                .keyBy(new FlinkStreamingTransformTranslators.ValueWithRecordIdKeySelector<>())
+                .transform("deduping", outputTypeInfo, new DedupingOperator<>())
+                .uid(format("%s/__deduplicated__", transformName));
+      } else {
+        source =
+            nonDedupSource
+                .flatMap(new FlinkStreamingTransformTranslators.StripIdsMap<>())
+                .returns(outputTypeInfo);
       }
-
-      try {
-        int parallelism =
-            env.getMaxParallelism() > 0 ? env.getMaxParallelism() : env.getParallelism();
-        FlinkStreamingTransformTranslators.UnboundedSourceWrapperNoValueWithRecordId sourceWrapper =
-            new FlinkStreamingTransformTranslators.UnboundedSourceWrapperNoValueWithRecordId<>(
-                new UnboundedSourceWrapper<>(
-                    transformName, pipelineOptions, convertedSource, parallelism));
-        return env.addSource(sourceWrapper)
-            .name(transformName)
-            .uid(transformName)
-            .returns(outputTypeInfo);
-      } catch (Exception e) {
-        throw new RuntimeException("Error while translating BoundedSource: " + convertedSource, e);
-      }
+    } catch (Exception e) {
+      throw new RuntimeException("Error while translating UnboundedSource: " + unboundedSource, e);
     }
-  }
 
-  private static class ReadUnboundedTranslator<T> implements ReadSourceTranslator<T> {
-
-    @Override
-    @SuppressWarnings("unchecked")
-    public DataStream<WindowedValue<T>> translateRead(
-        String transformName,
-        String outputCollectionId,
-        RunnerApi.ReadPayload payload,
-        RunnerApi.Pipeline pipeline,
-        PipelineOptions pipelineOptions,
-        StreamExecutionEnvironment env) {
-
-      final DataStream<WindowedValue<T>> source;
-      final DataStream<WindowedValue<ValueWithRecordId<T>>> nonDedupSource;
-      Coder<WindowedValue<T>> windowCoder =
-          instantiateCoder(outputCollectionId, pipeline.getComponents());
-
-      TypeInformation<WindowedValue<T>> outputTypeInfo = new CoderTypeInformation<>(windowCoder);
-
-      WindowingStrategy windowStrategy =
-          getWindowingStrategy(outputCollectionId, pipeline.getComponents());
-      TypeInformation<WindowedValue<ValueWithRecordId<T>>> withIdTypeInfo =
-          new CoderTypeInformation<>(
-              WindowedValue.getFullCoder(
-                  ValueWithRecordId.ValueWithRecordIdCoder.of(
-                      ((WindowedValueCoder) windowCoder).getValueCoder()),
-                  windowStrategy.getWindowFn().windowCoder()));
-
-      UnboundedSource unboundedSource;
-      try {
-        unboundedSource = ReadTranslation.unboundedSourceFromProto(payload);
-      } catch (IOException e) {
-        throw new RuntimeException("Failed to extract UnboundedSource from payload", e);
-      }
-
-      try {
-        int parallelism =
-            env.getMaxParallelism() > 0 ? env.getMaxParallelism() : env.getParallelism();
-        UnboundedSourceWrapper sourceWrapper =
-            new UnboundedSourceWrapper<>(
-                transformName, pipelineOptions, unboundedSource, parallelism);
-        nonDedupSource =
-            env.addSource(sourceWrapper)
-                .name(transformName)
-                .uid(transformName)
-                .returns(withIdTypeInfo);
-
-        if (unboundedSource.requiresDeduping()) {
-          source =
-              nonDedupSource
-                  .keyBy(new FlinkStreamingTransformTranslators.ValueWithRecordIdKeySelector<>())
-                  .transform("deduping", outputTypeInfo, new DedupingOperator<>())
-                  .uid(format("%s/__deduplicated__", transformName));
-        } else {
-          source =
-              nonDedupSource
-                  .flatMap(new FlinkStreamingTransformTranslators.StripIdsMap<>())
-                  .returns(outputTypeInfo);
-        }
-      } catch (Exception e) {
-        throw new RuntimeException(
-            "Error while translating UnboundedSource: " + unboundedSource, e);
-      }
-
-      return source;
-    }
+    return source;
   }
 
   private void translateImpulse(
@@ -729,6 +676,11 @@ public class FlinkStreamingPortablePipelineTranslator
                 valueCoder.getClass().getSimpleName()));
       }
       keyCoder = ((KvCoder) valueCoder).getKeyCoder();
+      if (keyCoder instanceof LengthPrefixCoder) {
+        // Remove any unnecessary length prefixes which add more payload
+        // but also are not expected for state requests inside the operator.
+        keyCoder = ((LengthPrefixCoder) keyCoder).getValueCoder();
+      }
       keySelector = new KvToByteBufferKeySelector(keyCoder);
       inputDataStream = inputDataStream.keyBy(keySelector);
     }
@@ -752,7 +704,7 @@ public class FlinkStreamingPortablePipelineTranslator
             context.getPipelineOptions(),
             stagePayload,
             context.getJobInfo(),
-            FlinkExecutableStageContext.factory(context.getPipelineOptions()),
+            FlinkExecutableStageContextFactory.getInstance(),
             collectionIdToTupleTag,
             getWindowingStrategy(inputPCollectionId, components),
             keyCoder,
@@ -810,6 +762,41 @@ public class FlinkStreamingPortablePipelineTranslator
     }
   }
 
+  private <T> void translateTestStream(
+      String id, RunnerApi.Pipeline pipeline, StreamingTranslationContext context) {
+    RunnerApi.Components components = pipeline.getComponents();
+
+    SerializableFunction<byte[], TestStream<T>> testStreamDecoder =
+        bytes -> {
+          try {
+            RunnerApi.TestStreamPayload testStreamPayload =
+                RunnerApi.TestStreamPayload.parseFrom(bytes);
+            @SuppressWarnings("unchecked")
+            TestStream<T> testStream =
+                (TestStream<T>)
+                    TestStreamTranslation.testStreamFromProtoPayload(
+                        testStreamPayload, RehydratedComponents.forComponents(components));
+            return testStream;
+          } catch (Exception e) {
+            throw new RuntimeException("Can't decode TestStream payload.", e);
+          }
+        };
+
+    RunnerApi.PTransform transform = components.getTransformsOrThrow(id);
+    String outputPCollectionId = Iterables.getOnlyElement(transform.getOutputsMap().values());
+    Coder<WindowedValue<T>> coder = instantiateCoder(outputPCollectionId, components);
+
+    DataStream<WindowedValue<T>> source =
+        context
+            .getExecutionEnvironment()
+            .addSource(
+                new TestStreamSource<>(
+                    testStreamDecoder, transform.getSpec().getPayload().toByteArray()),
+                new CoderTypeInformation<>(coder));
+
+    context.addDataStream(outputPCollectionId, source);
+  }
+
   private static LinkedHashMap<RunnerApi.ExecutableStagePayload.SideInputId, PCollectionView<?>>
       getSideInputIdToPCollectionViewMap(
           RunnerApi.ExecutableStagePayload stagePayload, RunnerApi.Components components) {
@@ -820,7 +807,11 @@ public class FlinkStreamingPortablePipelineTranslator
         new LinkedHashMap<>();
     // for PCollectionView compatibility, not used to transform materialization
     ViewFn<Iterable<WindowedValue<?>>, ?> viewFn =
-        (ViewFn) new PCollectionViews.MultimapViewFn<Iterable<WindowedValue<Void>>, Void>();
+        (ViewFn)
+            new PCollectionViews.MultimapViewFn<>(
+                (PCollectionViews.TypeDescriptorSupplier<Iterable<WindowedValue<Void>>>)
+                    () -> TypeDescriptors.iterables(new TypeDescriptor<WindowedValue<Void>>() {}),
+                (PCollectionViews.TypeDescriptorSupplier<Void>) TypeDescriptors::voids);
 
     for (RunnerApi.ExecutableStagePayload.SideInputId sideInputId :
         stagePayload.getSideInputsList()) {

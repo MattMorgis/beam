@@ -18,8 +18,8 @@
 package org.apache.beam.runners.spark.translation.streaming;
 
 import static org.apache.beam.runners.spark.translation.TranslationUtils.rejectStateAndTimers;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkArgument;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkState;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkState;
 
 import com.google.auto.service.AutoService;
 import java.util.ArrayList;
@@ -36,12 +36,12 @@ import org.apache.beam.runners.core.construction.PTransformTranslation;
 import org.apache.beam.runners.core.construction.ParDoTranslation;
 import org.apache.beam.runners.core.construction.SerializablePipelineOptions;
 import org.apache.beam.runners.core.construction.TransformPayloadTranslatorRegistrar;
-import org.apache.beam.runners.core.metrics.MetricsContainerStepMap;
 import org.apache.beam.runners.spark.coders.CoderHelpers;
 import org.apache.beam.runners.spark.io.ConsoleIO;
 import org.apache.beam.runners.spark.io.CreateStream;
 import org.apache.beam.runners.spark.io.SparkUnboundedSource;
 import org.apache.beam.runners.spark.metrics.MetricsAccumulator;
+import org.apache.beam.runners.spark.metrics.MetricsContainerStepMapAccumulator;
 import org.apache.beam.runners.spark.stateful.SparkGroupAlsoByWindowViaWindowSet;
 import org.apache.beam.runners.spark.translation.BoundedDataset;
 import org.apache.beam.runners.spark.translation.Dataset;
@@ -49,13 +49,14 @@ import org.apache.beam.runners.spark.translation.EvaluationContext;
 import org.apache.beam.runners.spark.translation.GroupCombineFunctions;
 import org.apache.beam.runners.spark.translation.MultiDoFnFunction;
 import org.apache.beam.runners.spark.translation.SparkAssignWindowFn;
-import org.apache.beam.runners.spark.translation.SparkKeyedCombineFn;
+import org.apache.beam.runners.spark.translation.SparkCombineFn;
 import org.apache.beam.runners.spark.translation.SparkPCollectionView;
 import org.apache.beam.runners.spark.translation.SparkPipelineTranslator;
 import org.apache.beam.runners.spark.translation.TransformEvaluator;
 import org.apache.beam.runners.spark.translation.TranslationUtils;
 import org.apache.beam.runners.spark.util.GlobalWatermarkHolder;
 import org.apache.beam.runners.spark.util.SideInputBroadcast;
+import org.apache.beam.runners.spark.util.SparkCompat;
 import org.apache.beam.sdk.coders.Coder;
 import org.apache.beam.sdk.coders.KvCoder;
 import org.apache.beam.sdk.io.Read;
@@ -78,13 +79,12 @@ import org.apache.beam.sdk.util.CombineFnUtil;
 import org.apache.beam.sdk.util.WindowedValue;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
+import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.PValue;
 import org.apache.beam.sdk.values.TimestampedValue;
 import org.apache.beam.sdk.values.TupleTag;
 import org.apache.beam.sdk.values.WindowingStrategy;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
-import org.apache.spark.Accumulator;
-import org.apache.spark.HashPartitioner;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.JavaSparkContext$;
@@ -244,7 +244,7 @@ public final class StreamingTransformTranslator {
         }
         // start by unifying streams into a single stream.
         JavaDStream<WindowedValue<T>> unifiedStreams =
-            context.getStreamingContext().union(dStreams.remove(0), dStreams);
+            SparkCompat.joinStreams(context.getStreamingContext(), dStreams);
         context.putDataset(transform, new UnboundedDataset<>(unifiedStreams, streamingSources));
       }
 
@@ -302,20 +302,9 @@ public final class StreamingTransformTranslator {
         final WindowedValue.WindowedValueCoder<V> wvCoder =
             WindowedValue.FullWindowedValueCoder.of(coder.getValueCoder(), windowFn.windowCoder());
 
-        // --- group by key only.
-        JavaDStream<WindowedValue<KV<K, Iterable<WindowedValue<V>>>>> groupedByKeyStream =
-            dStream.transform(
-                rdd ->
-                    GroupCombineFunctions.groupByKeyOnly(
-                        rdd,
-                        coder.getKeyCoder(),
-                        wvCoder,
-                        new HashPartitioner(rdd.rdd().sparkContext().defaultParallelism())));
-
-        // --- now group also by window.
         JavaDStream<WindowedValue<KV<K, Iterable<V>>>> outStream =
-            SparkGroupAlsoByWindowViaWindowSet.groupAlsoByWindow(
-                groupedByKeyStream,
+            SparkGroupAlsoByWindowViaWindowSet.groupByKeyAndWindow(
+                dStream,
                 coder.getKeyCoder(),
                 wvCoder,
                 windowingStrategy,
@@ -359,8 +348,8 @@ public final class StreamingTransformTranslator {
         JavaDStream<WindowedValue<KV<K, OutputT>>> outStream =
             dStream.transform(
                 rdd -> {
-                  SparkKeyedCombineFn<K, InputT, ?, OutputT> combineFnWithContext =
-                      new SparkKeyedCombineFn<>(
+                  SparkCombineFn<KV<K, InputT>, InputT, ?, OutputT> combineFnWithContext =
+                      SparkCombineFn.keyed(
                           fn,
                           options,
                           TranslationUtils.getSideInputs(
@@ -408,16 +397,19 @@ public final class StreamingTransformTranslator {
         final DoFnSchemaInformation doFnSchemaInformation =
             ParDoTranslation.getSchemaInformation(context.getCurrentTransform());
 
+        final Map<String, PCollectionView<?>> sideInputMapping =
+            ParDoTranslation.getSideInputMapping(context.getCurrentTransform());
+
         final String stepName = context.getCurrentTransform().getFullName();
         JavaPairDStream<TupleTag<?>, WindowedValue<?>> all =
             dStream.transformToPair(
                 rdd -> {
-                  final Accumulator<MetricsContainerStepMap> metricsAccum =
+                  final MetricsContainerStepMapAccumulator metricsAccum =
                       MetricsAccumulator.getInstance();
                   final Map<TupleTag<?>, KV<WindowingStrategy<?, ?>, SideInputBroadcast<?>>>
                       sideInputs =
                           TranslationUtils.getSideInputs(
-                              transform.getSideInputs(),
+                              transform.getSideInputs().values(),
                               JavaSparkContext.fromSparkContext(rdd.context()),
                               pviews);
 
@@ -434,7 +426,8 @@ public final class StreamingTransformTranslator {
                           sideInputs,
                           windowingStrategy,
                           false,
-                          doFnSchemaInformation));
+                          doFnSchemaInformation,
+                          sideInputMapping));
                 });
 
         Map<TupleTag<?>, PValue> outputs = context.getOutputs(transform);
@@ -487,12 +480,11 @@ public final class StreamingTransformTranslator {
         @SuppressWarnings("unchecked")
         final WindowFn<Object, W> windowFn = (WindowFn<Object, W>) windowingStrategy.getWindowFn();
 
-        final WindowedValue.WindowedValueCoder<V> wvCoder =
-            WindowedValue.FullWindowedValueCoder.of(coder.getValueCoder(), windowFn.windowCoder());
+        final WindowedValue.WindowedValueCoder<KV<K, V>> wvCoder =
+            WindowedValue.FullWindowedValueCoder.of(coder, windowFn.windowCoder());
 
         JavaDStream<WindowedValue<KV<K, V>>> reshuffledStream =
-            dStream.transform(
-                rdd -> GroupCombineFunctions.reshuffle(rdd, coder.getKeyCoder(), wvCoder));
+            dStream.transform(rdd -> GroupCombineFunctions.reshuffle(rdd, wvCoder));
 
         context.putDataset(transform, new UnboundedDataset<>(reshuffledStream, streamSources));
       }

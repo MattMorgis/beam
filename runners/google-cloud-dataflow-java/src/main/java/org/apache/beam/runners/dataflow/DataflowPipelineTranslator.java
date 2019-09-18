@@ -27,10 +27,10 @@ import static org.apache.beam.runners.dataflow.util.Structs.getString;
 import static org.apache.beam.sdk.options.ExperimentalOptions.hasExperiment;
 import static org.apache.beam.sdk.util.SerializableUtils.serializeToByteArray;
 import static org.apache.beam.sdk.util.StringUtils.byteArrayToJsonString;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkArgument;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkNotNull;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkState;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Strings.isNullOrEmpty;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkState;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Strings.isNullOrEmpty;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -74,7 +74,6 @@ import org.apache.beam.sdk.coders.Coder;
 import org.apache.beam.sdk.coders.IterableCoder;
 import org.apache.beam.sdk.extensions.gcp.options.GcpOptions;
 import org.apache.beam.sdk.io.Read;
-import org.apache.beam.sdk.options.ExperimentalOptions;
 import org.apache.beam.sdk.options.StreamingOptions;
 import org.apache.beam.sdk.runners.AppliedPTransform;
 import org.apache.beam.sdk.runners.TransformHierarchy;
@@ -104,10 +103,10 @@ import org.apache.beam.sdk.values.POutput;
 import org.apache.beam.sdk.values.PValue;
 import org.apache.beam.sdk.values.TupleTag;
 import org.apache.beam.sdk.values.WindowingStrategy;
-import org.apache.beam.vendor.grpc.v1p13p1.com.google.protobuf.TextFormat;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.annotations.VisibleForTesting;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Supplier;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterables;
+import org.apache.beam.vendor.grpc.v1p21p0.com.google.protobuf.TextFormat;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.annotations.VisibleForTesting;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Supplier;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -330,6 +329,8 @@ public class DataflowPipelineTranslator {
         List<String> experiments = options.getExperiments();
         if (experiments == null) {
           experiments = new ArrayList<String>();
+        } else {
+          experiments = new ArrayList<String>(experiments);
         }
         if (!experiments.contains(GcpOptions.STREAMING_ENGINE_EXPERIMENT)) {
           experiments.add(GcpOptions.STREAMING_ENGINE_EXPERIMENT);
@@ -406,10 +407,8 @@ public class DataflowPipelineTranslator {
       if (options.getServiceAccount() != null) {
         environment.setServiceAccountEmail(options.getServiceAccount());
       }
-      // TODO(BEAM-6664): Remove once Dataflow supports --dataflowKmsKey.
       if (options.getDataflowKmsKey() != null) {
-        ExperimentalOptions.addExperiment(
-            options, String.format("service_default_cmek_config=%s", options.getDataflowKmsKey()));
+        environment.setServiceKmsKeyName(options.getDataflowKmsKey());
       }
 
       pipeline.traverseTopologically(this);
@@ -920,14 +919,18 @@ public class DataflowPipelineTranslator {
             DoFnSchemaInformation doFnSchemaInformation;
             doFnSchemaInformation =
                 ParDoTranslation.getSchemaInformation(context.getCurrentTransform());
-
+            Map<String, PCollectionView<?>> sideInputMapping =
+                ParDoTranslation.getSideInputMapping(context.getCurrentTransform());
             Map<TupleTag<?>, Coder<?>> outputCoders =
                 context.getOutputs(transform).entrySet().stream()
                     .collect(
                         Collectors.toMap(
                             Map.Entry::getKey, e -> ((PCollection) e.getValue()).getCoder()));
             translateInputs(
-                stepContext, context.getInput(transform), transform.getSideInputs(), context);
+                stepContext,
+                context.getInput(transform),
+                transform.getSideInputs().values(),
+                context);
             translateOutputs(context.getOutputs(transform), stepContext);
             String ptransformId =
                 context.getSdkComponents().getPTransformIdOrThrow(context.getCurrentTransform());
@@ -936,12 +939,13 @@ public class DataflowPipelineTranslator {
                 ptransformId,
                 transform.getFn(),
                 context.getInput(transform).getWindowingStrategy(),
-                transform.getSideInputs(),
+                transform.getSideInputs().values(),
                 context.getInput(transform).getCoder(),
                 context,
                 transform.getMainOutputTag(),
                 outputCoders,
-                doFnSchemaInformation);
+                doFnSchemaInformation,
+                sideInputMapping);
 
             // TODO: Move this logic into translateFn once the legacy ProcessKeyedElements is
             // removed.
@@ -973,7 +977,8 @@ public class DataflowPipelineTranslator {
             DoFnSchemaInformation doFnSchemaInformation;
             doFnSchemaInformation =
                 ParDoTranslation.getSchemaInformation(context.getCurrentTransform());
-
+            Map<String, PCollectionView<?>> sideInputMapping =
+                ParDoTranslation.getSideInputMapping(context.getCurrentTransform());
             StepTranslationContext stepContext = context.addStep(transform, "ParallelDo");
             Map<TupleTag<?>, Coder<?>> outputCoders =
                 context.getOutputs(transform).entrySet().stream()
@@ -982,7 +987,10 @@ public class DataflowPipelineTranslator {
                             Map.Entry::getKey, e -> ((PCollection) e.getValue()).getCoder()));
 
             translateInputs(
-                stepContext, context.getInput(transform), transform.getSideInputs(), context);
+                stepContext,
+                context.getInput(transform),
+                transform.getSideInputs().values(),
+                context);
             stepContext.addOutput(
                 transform.getMainOutputTag().getId(), context.getOutput(transform));
             String ptransformId =
@@ -992,12 +1000,13 @@ public class DataflowPipelineTranslator {
                 ptransformId,
                 transform.getFn(),
                 context.getInput(transform).getWindowingStrategy(),
-                transform.getSideInputs(),
+                transform.getSideInputs().values(),
                 context.getInput(transform).getCoder(),
                 context,
                 transform.getMainOutputTag(),
                 outputCoders,
-                doFnSchemaInformation);
+                doFnSchemaInformation,
+                sideInputMapping);
 
             // TODO: Move this logic into translateFn once the legacy ProcessKeyedElements is
             // removed.
@@ -1059,7 +1068,8 @@ public class DataflowPipelineTranslator {
             DoFnSchemaInformation doFnSchemaInformation;
             doFnSchemaInformation =
                 ParDoTranslation.getSchemaInformation(context.getCurrentTransform());
-
+            Map<String, PCollectionView<?>> sideInputMapping =
+                ParDoTranslation.getSideInputMapping(context.getCurrentTransform());
             StepTranslationContext stepContext =
                 context.addStep(transform, "SplittableProcessKeyed");
             Map<TupleTag<?>, Coder<?>> outputCoders =
@@ -1082,7 +1092,8 @@ public class DataflowPipelineTranslator {
                 context,
                 transform.getMainOutputTag(),
                 outputCoders,
-                doFnSchemaInformation);
+                doFnSchemaInformation,
+                sideInputMapping);
 
             stepContext.addInput(
                 PropertyNames.RESTRICTION_CODER,
@@ -1094,7 +1105,7 @@ public class DataflowPipelineTranslator {
   private static void translateInputs(
       StepTranslationContext stepContext,
       PCollection<?> input,
-      List<PCollectionView<?>> sideInputs,
+      Iterable<PCollectionView<?>> sideInputs,
       TranslationContext context) {
     stepContext.addInput(PropertyNames.PARALLEL_INPUT, input);
     translateSideInputs(stepContext, sideInputs, context);
@@ -1103,7 +1114,7 @@ public class DataflowPipelineTranslator {
   // Used for ParDo
   private static void translateSideInputs(
       StepTranslationContext stepContext,
-      List<PCollectionView<?>> sideInputs,
+      Iterable<PCollectionView<?>> sideInputs,
       TranslationContext context) {
     Map<String, Object> nonParInputs = new HashMap<>();
 
@@ -1126,7 +1137,8 @@ public class DataflowPipelineTranslator {
       TranslationContext context,
       TupleTag<?> mainOutput,
       Map<TupleTag<?>, Coder<?>> outputCoders,
-      DoFnSchemaInformation doFnSchemaInformation) {
+      DoFnSchemaInformation doFnSchemaInformation,
+      Map<String, PCollectionView<?>> sideInputMapping) {
     DoFnSignature signature = DoFnSignatures.getSignature(fn.getClass());
 
     if (signature.usesState() || signature.usesTimers()) {
@@ -1152,7 +1164,8 @@ public class DataflowPipelineTranslator {
                       inputCoder,
                       outputCoders,
                       mainOutput,
-                      doFnSchemaInformation))));
+                      doFnSchemaInformation,
+                      sideInputMapping))));
     }
 
     // Setting USES_KEYED_STATE will cause an ungrouped shuffle, which works

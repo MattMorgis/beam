@@ -25,7 +25,7 @@ import static org.apache.beam.sdk.io.elasticsearch.ElasticsearchIOTestCommon.get
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.net.ServerSocket;
+import org.apache.beam.sdk.io.common.NetworkTestHelper;
 import org.apache.beam.sdk.testing.TestPipeline;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.common.settings.Settings;
@@ -64,9 +64,7 @@ public class ElasticsearchIOTest implements Serializable {
 
   @BeforeClass
   public static void beforeClass() throws IOException {
-    ServerSocket serverSocket = new ServerSocket(0);
-    esHttpPort = serverSocket.getLocalPort();
-    serverSocket.close();
+    esHttpPort = NetworkTestHelper.getAvailableLocalPort();
     LOG.info("Starting embedded Elasticsearch instance ({})", esHttpPort);
     Settings.Builder settingsBuilder =
         Settings.settingsBuilder()
@@ -118,7 +116,7 @@ public class ElasticsearchIOTest implements Serializable {
 
   @Before
   public void before() throws Exception {
-    ElasticSearchIOTestUtils.deleteIndex(connectionConfiguration, restClient);
+    ElasticsearchIOTestUtils.deleteIndex(connectionConfiguration, restClient);
   }
 
   @Test
@@ -133,9 +131,15 @@ public class ElasticsearchIOTest implements Serializable {
   }
 
   @Test
-  public void testReadWithQuery() throws Exception {
+  public void testReadWithQueryString() throws Exception {
     elasticsearchIOTestCommon.setPipeline(pipeline);
-    elasticsearchIOTestCommon.testReadWithQuery();
+    elasticsearchIOTestCommon.testReadWithQueryString();
+  }
+
+  @Test
+  public void testReadWithQueryValueProvider() throws Exception {
+    elasticsearchIOTestCommon.setPipeline(pipeline);
+    elasticsearchIOTestCommon.testReadWithQueryValueProvider();
   }
 
   @Test
