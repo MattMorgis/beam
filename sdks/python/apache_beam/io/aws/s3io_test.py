@@ -26,90 +26,90 @@ from apache_beam.io.aws.clients.s3 import fake_client
 # Protect against environments where boto3 library is not available.
 # pylint: disable=wrong-import-order, wrong-import-position
 try:
-  from apache_beam.io.aws import s3io
+    from apache_beam.io.aws import s3io
 except ImportError:
-  pass
+      pass
 # pylint: enable=wrong-import-order, wrong-import-position
 
 
 class TestS3PathParser(unittest.TestCase):
 
-  BAD_S3_PATHS = [
-      's3://',
-      's3://bucket',
-      's3:///name',
-      's3:///',
-      's3:/blah/bucket/name',
-  ]
+    BAD_S3_PATHS = [
+        's3://',
+        's3://bucket',
+        's3:///name',
+        's3:///',
+        's3:/blah/bucket/name',
+    ]
 
-  def test_s3_path(self):
-    self.assertEqual(
-        s3io.parse_s3_path('s3://bucket/name'), ('bucket', 'name'))
-    self.assertEqual(
-        s3io.parse_s3_path('s3://bucket/name/sub'), ('bucket', 'name/sub'))
+    def test_s3_path(self):
+        self.assertEqual(
+            s3io.parse_s3_path('s3://bucket/name'), ('bucket', 'name'))
+        self.assertEqual(
+            s3io.parse_s3_path('s3://bucket/name/sub'), ('bucket', 'name/sub'))
 
-  def test_bad_s3_path(self):
-    for path in self.BAD_S3_PATHS:
-      self.assertRaises(ValueError, s3io.parse_s3_path, path)
-    self.assertRaises(ValueError, s3io.parse_s3_path, 's3://bucket/')
+    def test_bad_s3_path(self):
+        for path in self.BAD_S3_PATHS:
+            self.assertRaises(ValueError, s3io.parse_s3_path, path)
+        self.assertRaises(ValueError, s3io.parse_s3_path, 's3://bucket/')
 
-  def test_s3_path_object_optional(self):
-    self.assertEqual(
-        s3io.parse_s3_path('s3://bucket/name', object_optional=True),
-        ('bucket', 'name'))
-    self.assertEqual(
-        s3io.parse_s3_path('s3://bucket/', object_optional=True),
-        ('bucket', ''))
+    def test_s3_path_object_optional(self):
+        self.assertEqual(
+            s3io.parse_s3_path('s3://bucket/name', object_optional=True),
+            ('bucket', 'name'))
+        self.assertEqual(
+            s3io.parse_s3_path('s3://bucket/', object_optional=True),
+            ('bucket', ''))
 
-  def test_bad_s3_path_object_optional(self):
-    for path in self.BAD_S3_PATHS:
-      self.assertRaises(ValueError, s3io.parse_s3_path, path, True)
+    def test_bad_s3_path_object_optional(self):
+        for path in self.BAD_S3_PATHS:
+            self.assertRaises(ValueError, s3io.parse_s3_path, path, True)
 
 
 class TestS3IO(unittest.TestCase):
 
-  def _insert_random_file(self, client, path, size):
-    bucket, name = s3io.parse_s3_path(path)
-    f = fake_client.FakeFile(bucket, name, os.urandom(size))
-    client.add_file(f)
-    return f
+    def _insert_random_file(self, client, path, size):
+        bucket, name = s3io.parse_s3_path(path)
+        f = fake_client.FakeFile(bucket, name, os.urandom(size))
+        client.add_file(f)
+        return f
 
-  def setUp(self):
-    # self.client = fake_client.FakeS3Client()
-    # self.aws = s3io.S3IO(self.client)
-    self.aws = s3io.S3IO()
+    def setUp(self):
+        # self.client = fake_client.FakeS3Client()
+        # self.aws = s3io.S3IO(self.client)
+        self.aws = s3io.S3IO()
 
-  def test_file_mode(self):
-    file_name = 's3://random-data-sets/jerry/pigpen/phil'
-    with self.aws.open(file_name, 'w') as f:
-      assert f.mode == 'w'
-    with self.aws.open(file_name, 'r') as f:
-      assert f.mode == 'r'
+    def test_file_mode(self):
+        file_name = 's3://random-data-sets/jerry/pigpen/phil'
+        with self.aws.open(file_name, 'w') as f:
+            assert f.mode == 'w'
+        with self.aws.open(file_name, 'r') as f:
+            assert f.mode == 'r'
 
-  def test_full_file_read(self):
-    file_name = 's3://random-data-sets/jerry/pigpen/phil'
-    file_size = 5
-    f = self.aws.open(file_name)
-    self.assertEqual(f.mode, 'r')
-    f.seek(0, os.SEEK_END)
-    self.assertEqual(f.tell(), file_size)
-    self.assertEqual(f.read(), b'')
-    f.seek(0)
-    self.assertEqual(f.read(), 'phil\n')
+    def test_full_file_read(self):
+        file_name = 's3://random-data-sets/jerry/pigpen/phil'
+        file_size = 5
+        f = self.aws.open(file_name)
+        self.assertEqual(f.mode, 'r')
+        f.seek(0, os.SEEK_END)
+        self.assertEqual(f.tell(), file_size)
+        self.assertEqual(f.read(), b'')
+        f.seek(0)
+        self.assertEqual(f.read(), 'phil\n')
 
-  def test_file_write(self):
-    file_name = 's3://random-data-sets/_write_file'
-    file_size = 5 * 1024 * 1024 + 2000
-    contents = os.urandom(file_size)
-    f = self.aws.open(file_name, 'w')
-    self.assertEqual(f.mode, 'w')
-    f.write(contents[0:1000])
-    f.write(contents[1000:1024 * 1024])
-    f.write(contents[1024 * 1024:])
-    f.close()
-    bucket, name = s3io.parse_s3_path(file_name)
-    self.assertEqual(
-        self.client.objects.get_file(bucket, name).contents, contents)
+    def test_file_write(self):
+        file_name = 's3://random-data-sets/_write_file'
+        file_size = 5 * 1024 * 1024 + 2000
+        contents = os.urandom(file_size)
+        f = self.aws.open(file_name, 'w')
+        self.assertEqual(f.mode, 'w')
+        f.write(contents[0:1000])
+        f.write(contents[1000:1024 * 1024])
+        f.write(contents[1024 * 1024:])
+        f.close()
+        bucket, name = s3io.parse_s3_path(file_name)
+        self.assertEqual(
+            self.client.objects.get_file(bucket, name).contents, contents)
 
   # def test_list_prefix(self):
   #   bucket_name = 's3-tests'
@@ -149,5 +149,5 @@ class TestS3IO(unittest.TestCase):
 
 
 if __name__ == '__main__':
-  logging.getLogger().setLevel(logging.INFO)
-  unittest.main()
+    logging.getLogger().setLevel(logging.INFO)
+    unittest.main()

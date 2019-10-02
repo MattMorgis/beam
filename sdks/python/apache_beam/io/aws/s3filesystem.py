@@ -31,192 +31,192 @@ __all__ = ['S3FileSystem']
 
 
 class S3FileSystem(FileSystem):
-  """An S3 `FileSystem` implementation for accessing files on AWS S3
-  """
-
-  CHUNK_SIZE = s3io.MAX_BATCH_OPERATION_SIZE
-  S3_PREFIX = 's3://'
-
-  @classmethod
-  def scheme(cls):
-    """URI scheme for the FileSystem
+    """An S3 `FileSystem` implementation for accessing files on AWS S3
     """
-    return 's3'
 
-  def join(self, basepath, *paths):
-    """Join two or more pathname components for the filesystem
+    CHUNK_SIZE = s3io.MAX_BATCH_OPERATION_SIZE
+    S3_PREFIX = 's3://'
 
-    Args:
-      basepath: string path of the first component of the path
-      paths: path components to be added
+    @classmethod
+    def scheme(cls):
+        """URI scheme for the FileSystem
+        """
+        return 's3'
 
-    Returns: full path after combining all of the return nulled components
-    """
-    if not basepath.startswith(S3FileSystem.S3_PREFIX):
-      raise ValueError('Basepath %r must be S3 path.' % basepath)
+    def join(self, basepath, *paths):
+        """Join two or more pathname components for the filesystem
 
-    path = basepath
-    for p in paths:
-      path = path.rstrip('/') + '/' + p.lstrip('/')
-    return path
+        Args:
+        basepath: string path of the first component of the path
+        paths: path components to be added
 
-  def split(self, path):
-    path = path.strip()
-    if not path.startswith(S3FileSystem.S3_PREFIX):
-      raise ValueError('Path %r must be S3 path.' % path)
+        Returns: full path after combining all of the return nulled components
+        """
+        if not basepath.startswith(S3FileSystem.S3_PREFIX):
+            raise ValueError('Basepath %r must be S3 path.' % basepath)
 
-    prefix_len = len(S3FileSystem.S3_PREFIX)
-    last_sep = path[prefix_len:].rfind('/')
-    if last_sep >= 0:
-      last_sep += prefix_len
+        path = basepath
+        for p in paths:
+            path = path.rstrip('/') + '/' + p.lstrip('/')
+            return path
 
-    if last_sep > 0:
-      return (path[:last_sep], path[last_sep + 1:])
-    elif last_sep < 0:
-      return (path, '')
-    else:
-      raise ValueError('Invalid path: %s' % path)
+    def split(self, path):
+        path = path.strip()
+        if not path.startswith(S3FileSystem.S3_PREFIX):
+            raise ValueError('Path %r must be S3 path.' % path)
 
-  def mkdirs(self, path):
-    """Recursively create directories for the provided path.
+        prefix_len = len(S3FileSystem.S3_PREFIX)
+        last_sep = path[prefix_len:].rfind('/')
+        if last_sep >= 0:
+            last_sep += prefix_len
 
-    Args:
-      path: string path of the directory structure that should be created
+        if last_sep > 0:
+            return (path[:last_sep], path[last_sep + 1:])
+        elif last_sep < 0:
+            return (path, '')
+        else:
+            raise ValueError('Invalid path: %s' % path)
 
-    Raises:
-      IOError if leaf directory already exists.
-    """
-    pass
+    def mkdirs(self, path):
+        """Recursively create directories for the provided path.
 
-  def has_dirs(self):
-    """Whether this FileSystem supports directories."""
-    return False
+        Args:
+        path: string path of the directory structure that should be created
 
-  def _list(self, dir_or_prefix):
-    """List files in a location.
+        Raises:
+        IOError if leaf directory already exists.
+        """
+        pass
 
-    Listing is non-recursive, for filesystems that support directories.
+    def has_dirs(self):
+        """Whether this FileSystem supports directories."""
+        return False
 
-    Args:
-      dir_or_prefix: (string) A directory or location prefix (for filesystems
-        that don't have directories).
+    def _list(self, dir_or_prefix):
+        """List files in a location.
 
-    Returns:
-      Generator of ``FileMetadata`` objects.
+        Listing is non-recursive, for filesystems that support directories.
 
-    Raises:
-      ``BeamIOError`` if listing fails, but not if no files were found.
-    """
-    try:
-      for path, size in iteritems(s3io.S3IO().list_prefix(dir_or_prefix)):
-        yield FileMetadata(path, size)
-    except Exception as e:  # pylint: disable=broad-except
-      raise BeamIOError("List operation failed", {dir_or_prefix: e})
+        Args:
+        dir_or_prefix: (string) A directory or location prefix (for filesystems
+            that don't have directories).
 
-  def create(self, path, mime_type='application/octet-stream',
+        Returns:
+        Generator of ``FileMetadata`` objects.
+
+        Raises:
+        ``BeamIOError`` if listing fails, but not if no files were found.
+        """
+        try:
+            for path, size in iteritems(s3io.S3IO().list_prefix(dir_or_prefix)):
+                yield FileMetadata(path, size)
+        except Exception as e:  # pylint: disable=broad-except
+            raise BeamIOError("List operation failed", {dir_or_prefix: e})
+
+    def create(self, path, mime_type='application/octet-stream',
+               compression_type=CompressionTypes.AUTO):
+        """Returns a write channel for the given file path.
+
+        Args:
+        path: string path of the file object to be written to the system
+        mime_type: MIME type to specify the type of content in the file object
+        compression_type: Type of compression to be used for this object
+
+        Returns: file handle with a close function for the user to use
+        """
+        raise NotImplementedError
+
+    def open(self, path, mime_type='application/octet-stream',
              compression_type=CompressionTypes.AUTO):
-    """Returns a write channel for the given file path.
+        """Returns a read channel for the given file path.
 
-    Args:
-      path: string path of the file object to be written to the system
-      mime_type: MIME type to specify the type of content in the file object
-      compression_type: Type of compression to be used for this object
+        Args:
+        path: string path of the file object to be written to the system
+        mime_type: MIME type to specify the type of content in the file object
+        compression_type: Type of compression to be used for this object
 
-    Returns: file handle with a close function for the user to use
-    """
-    raise NotImplementedError
+        Returns: file handle with a close function for the user to use
+        """
+        raise NotImplementedError
 
-  def open(self, path, mime_type='application/octet-stream',
-           compression_type=CompressionTypes.AUTO):
-    """Returns a read channel for the given file path.
+    def copy(self, source_file_names, destination_file_names):
+        """Recursively copy the file tree from the source to the destination
 
-    Args:
-      path: string path of the file object to be written to the system
-      mime_type: MIME type to specify the type of content in the file object
-      compression_type: Type of compression to be used for this object
+        Args:
+        source_file_names: list of source file objects that needs to be copied
+        destination_file_names: list of destination of the new object
 
-    Returns: file handle with a close function for the user to use
-    """
-    raise NotImplementedError
+        Raises:
+        ``BeamIOError`` if any of the copy operations fail
+        """
+        err_msg = ("source_file_names and destination_file_names should "
+                   "be equal in length")
+        raise NotImplementedError
 
-  def copy(self, source_file_names, destination_file_names):
-    """Recursively copy the file tree from the source to the destination
+    def rename(self, source_file_names, destination_file_names):
+        """Rename the files at the source list to the destination list.
+        Source and destination lists should be of the same size.
 
-    Args:
-      source_file_names: list of source file objects that needs to be copied
-      destination_file_names: list of destination of the new object
+        Args:
+        source_file_names: List of file paths that need to be moved
+        destination_file_names: List of destination_file_names for the files
 
-    Raises:
-      ``BeamIOError`` if any of the copy operations fail
-    """
-    err_msg = ("source_file_names and destination_file_names should "
-               "be equal in length")
-    raise NotImplementedError
+        Raises:
+        ``BeamIOError`` if any of the rename operations fail
+        """
+        err_msg = ("source_file_names and destination_file_names should "
+                   "be equal in length")
+        raise NotImplementedError
 
-  def rename(self, source_file_names, destination_file_names):
-    """Rename the files at the source list to the destination list.
-    Source and destination lists should be of the same size.
+    def exists(self, path):
+        """Check if the provided path exists on the FileSystem.
 
-    Args:
-      source_file_names: List of file paths that need to be moved
-      destination_file_names: List of destination_file_names for the files
+        Args:
+        path: string path that needs to be checked.
 
-    Raises:
-      ``BeamIOError`` if any of the rename operations fail
-    """
-    err_msg = ("source_file_names and destination_file_names should "
-               "be equal in length")
-    raise NotImplementedError
+        Returns: boolean flag indicating if path exists
+        """
+        raise NotImplementedError
 
-  def exists(self, path):
-    """Check if the provided path exists on the FileSystem.
+    def size(self, path):
+        """Get size of path on the FileSystem.
 
-    Args:
-      path: string path that needs to be checked.
+        Args:
+        path: string path in question.
 
-    Returns: boolean flag indicating if path exists
-    """
-    raise NotImplementedError
+        Returns: int size of path according to the FileSystem.
 
-  def size(self, path):
-    """Get size of path on the FileSystem.
+        Raises:
+        ``BeamIOError`` if path doesn't exist.
+        """
+        raise NotImplementedError
 
-    Args:
-      path: string path in question.
+    def last_updated(self, path):
+        """Get UNIX Epoch time in seconds on the FileSystem.
 
-    Returns: int size of path according to the FileSystem.
+        Args:
+        path: string path of file.
 
-    Raises:
-      ``BeamIOError`` if path doesn't exist.
-    """
-    raise NotImplementedError
+        Returns: float UNIX Epoch time
 
-  def last_updated(self, path):
-    """Get UNIX Epoch time in seconds on the FileSystem.
+        Raises:
+        ``BeamIOError`` if path doesn't exist.
+        """
+        raise NotImplementedError
 
-    Args:
-      path: string path of file.
+    def checksum(self, path):
+        """Fetch checksum metadata of a file on the
+        :class:`~apache_beam.io.filesystem.FileSystem`.
 
-    Returns: float UNIX Epoch time
+        Args:
+        path: string path of a file.
 
-    Raises:
-      ``BeamIOError`` if path doesn't exist.
-    """
-    raise NotImplementedError
+        Returns: string containing checksum
 
-  def checksum(self, path):
-    """Fetch checksum metadata of a file on the
-    :class:`~apache_beam.io.filesystem.FileSystem`.
+        Raises:
+        ``BeamIOError`` if path isn't a file or doesn't exist.
+        """
+        raise NotImplementedError
 
-    Args:
-      path: string path of a file.
-
-    Returns: string containing checksum
-
-    Raises:
-      ``BeamIOError`` if path isn't a file or doesn't exist.
-    """
-    raise NotImplementedError
-
-  def delete(self, paths):
-    raise NotImplementedError
+    def delete(self, paths):
+        raise NotImplementedError
