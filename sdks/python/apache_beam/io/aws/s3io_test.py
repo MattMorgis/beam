@@ -95,7 +95,7 @@ class TestS3IO(unittest.TestCase):
     self.assertEqual(f.tell(), file_size)
     self.assertEqual(f.read(), b'')
     f.seek(0)
-    self.assertEqual(f.read(), 'phil\n')
+    self.assertEqual(f.read(), b'phil\n')
 
   def test_file_write(self):
     file_name = 's3://random-data-sets/_write_file'
