@@ -217,8 +217,8 @@ class S3Uploader(Uploader):
 
     while len(self.buffer) >= MIN_WRITE_SIZE:
       # Take the first chunk off the buffer and write it to S3
-      data = self.buffer[:MAX_WRITE_SIZE]
-      self._write_to_s3(data)
+      chunk = self.buffer[:MAX_WRITE_SIZE]
+      self._write_to_s3(chunk)
       # Remove the written chunk from the buffer
       self.buffer = self.buffer[MAX_WRITE_SIZE:]
 

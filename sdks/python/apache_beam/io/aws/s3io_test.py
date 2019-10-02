@@ -112,6 +112,23 @@ class TestS3IO(unittest.TestCase):
     new_f_contents = new_f.read()
     self.assertEqual(
         new_f_contents, contents)
+
+  #def test_big_file_write(self):
+  #  KiB, MiB, GiB = 1024, 1024 * 1024, 1024 * 1024 * 1024
+  #  file_name = 's3://random-data-sets/_write_file'
+  #  file_size = 7 * GiB
+  #  contents = os.urandom(file_size)
+  #  f = self.aws.open(file_name, 'w')
+  #  self.assertEqual(f.mode, 'w')
+  #  f.write(contents[:1 * MiB])
+  #  f.write(contents[1 * MiB : 6 * GiB])
+  #  f.write(contents[6 * GiB : ])
+  #  f.close()
+  #  bucket, name = s3io.parse_s3_path(file_name)
+  #  new_f = self.aws.open(file_name, 'r')
+  #  new_f_contents = new_f.read()
+  #  self.assertEqual(
+  #      new_f_contents, contents)
   
   def test_file_flush(self):
     file_name = 's3://random-data-sets/_flush_file'
