@@ -112,6 +112,25 @@ class TestS3IO(unittest.TestCase):
     new_f_contents = new_f.read()
     self.assertEqual(
         new_f_contents, contents)
+  
+  def test_file_flush(self):
+    file_name = 's3://random-data-sets/_flush_file'
+    file_size = 5 * 1024 * 1024 + 2000
+    contents = os.urandom(file_size)
+    bucket, name = s3io.parse_s3_path(file_name)
+    f = self.aws.open(file_name, 'w')
+    self.assertEqual(f.mode, 'w')
+    f.write(contents[0:1000])
+    f.flush()
+    f.write(contents[1000:1024 * 1024])
+    f.flush()
+    f.flush()  # Should be a NOOP.
+    f.write(contents[1024 * 1024:])
+    f.close()  # This should already call the equivalent of flush() in its body.
+    new_f = self.aws.open(file_name, 'r')
+    new_f_contents = new_f.read()
+    self.assertEqual(
+        new_f_contents, contents)
 
   # def test_list_prefix(self):
   #   bucket_name = 's3-tests'
