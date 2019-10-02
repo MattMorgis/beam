@@ -19,6 +19,7 @@ from __future__ import absolute_import
 
 import os
 import logging
+import random
 import unittest
 
 from apache_beam.io.aws.clients.s3 import fake_client
@@ -130,6 +131,31 @@ class TestS3IO(unittest.TestCase):
   #  self.assertEqual(
   #      new_f_contents, contents)
   
+  def test_file_random_seek(self):
+    file_name = 's3://random-data-sets/_write_seek_file'
+    file_size = 5 * 1024 * 1024 - 100
+    contents = os.urandom(file_size)
+    with self.aws.open(file_name, 'w') as wf:
+      wf.write(contents)
+
+    # random_file = self._insert_random_file(self.client, file_name, file_size)
+    f = self.aws.open(file_name)
+    random.seed(0)
+
+    for _ in range(0, 10):
+      a = random.randint(0, file_size - 1)
+      b = random.randint(0, file_size - 1)
+      start, end = min(a, b), max(a, b)
+      f.seek(start)
+
+      self.assertEqual(f.tell(), start)
+
+      self.assertEqual(
+        f.read(end - start + 1), contents[start:end + 1]
+      )
+      self.assertEqual(f.tell(), end + 1)
+
+
   def test_file_flush(self):
     file_name = 's3://random-data-sets/_flush_file'
     file_size = 5 * 1024 * 1024 + 2000
