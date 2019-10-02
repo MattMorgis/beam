@@ -99,7 +99,7 @@ class TestS3IO(unittest.TestCase):
 
   def test_file_write(self):
     file_name = 's3://random-data-sets/_write_file'
-    file_size = 5 * 1024 * 1024 + 2000
+    file_size = 8 * 1024 * 1024 + 2000
     contents = os.urandom(file_size)
     f = self.aws.open(file_name, 'w')
     self.assertEqual(f.mode, 'w')
@@ -108,8 +108,10 @@ class TestS3IO(unittest.TestCase):
     f.write(contents[1024 * 1024:])
     f.close()
     bucket, name = s3io.parse_s3_path(file_name)
+    new_f = self.aws.open(file_name, 'r')
+    new_f_contents = new_f.read()
     self.assertEqual(
-        self.client.objects.get_file(bucket, name).contents, contents)
+        new_f_contents, contents)
 
   # def test_list_prefix(self):
   #   bucket_name = 's3-tests'

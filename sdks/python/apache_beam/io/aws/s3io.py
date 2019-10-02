@@ -93,7 +93,7 @@ class S3IO(object):
     elif mode == 'w' or mode == 'wb':
       uploader = S3Uploader(self.client, filename, None)
       return io.BufferedWriter(UploaderStream(uploader, mode=mode),
-                               buffer_size=128 * 1024)
+                               buffer_size=10 * 1024 * 1024)
     else:
       raise ValueError('Invalid file open mode: %s.' % mode)
 
