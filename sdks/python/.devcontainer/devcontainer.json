@@ -1,0 +1,10 @@
+{
+	"name": "Beam",
+	"dockerFile": "Dockerfile",
+	"context": "..",
+	"extensions": ["ms-python.python"],
+	"settings": {"python.pythonPath": "/usr/local/bin/python"},
+	"runArgs": ["-v", "${env:HOME}/.aws:/root/.aws"],
+	"postCreateCommand": 
+		"python setup.py build && python setup.py install && pip install .[aws]"
+}
