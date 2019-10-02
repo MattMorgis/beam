@@ -52,14 +52,14 @@ class Client(object):
     try:
       boto_response = self.client.head_object(**kwargs)
     except ClientError as e:
-      s3error = messages.S3ClientError(e.message)
+      s3error = messages.S3ClientError(e.response['Error']['Message'])
       s3error.code = int(e.response['Error']['Code'])
       s3error.message = e.response['Error']['Message']
       raise s3error
     except NoCredentialsError as e:
-      s3error = messages.S3ClientError(e.message)
+      s3error = messages.S3ClientError(e.response['Error']['Message'])
       s3error.code = 400
-      s3error.message = e.message
+      s3error.message = e.response['Error']['Message']
       raise s3error
 
     item = messages.Item(boto_response['ETag'],
@@ -86,14 +86,14 @@ class Client(object):
                                                  start,
                                                  end))
     except ClientError as e:
-      s3error = messages.S3ClientError(e.message)
+      s3error = messages.S3ClientError(e.response['Error']['Message'])
       s3error.code = int(e.response['Error']['Code'])
       s3error.message = e.response['Error']['Message']
       raise s3error
     except NoCredentialsError as e:
-      s3error = messages.S3ClientError(e.message)
+      s3error = messages.S3ClientError(e.response['Error']['Message'])
       s3error.code = 400
-      s3error.message = e.message
+      s3error.message = e.response['Error']['Message']
       raise s3error
 
     return boto_response['Body'].read()
@@ -151,14 +151,14 @@ class Client(object):
                                                      request.part_number)
       return respnose_message
     except ClientError as e:
-      s3error = messages.S3ClientError(e.message)
+      s3error = messages.S3ClientError(e.response['Error']['Message'])
       s3error.code = int(e.response['Error']['Code'])
       s3error.message = e.response['Error']['Message']
       raise s3error
     except NoCredentialsError as e:
-      s3error = messages.S3ClientError(e.message)
+      s3error = messages.S3ClientError(e.response['Error']['Message'])
       s3error.code = 400
-      s3error.message = e.message
+      s3error.message = e.response['Error']['Message']
       raise s3error
 
   def complete_multipart_upload(self, request):
