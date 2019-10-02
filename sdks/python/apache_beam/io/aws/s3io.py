@@ -93,7 +93,7 @@ class S3IO(object):
     elif mode == 'w' or mode == 'wb':
       uploader = S3Uploader(self.client, filename, None)
       return io.BufferedWriter(UploaderStream(uploader, mode=mode),
-                               buffer_size=10 * 1024 * 1024)
+                               buffer_size=128 * 1024)
     else:
       raise ValueError('Invalid file open mode: %s.' % mode)
 
@@ -182,6 +182,8 @@ class S3Uploader(Uploader):
     #self._mime_type = mime_type
 
     self.part_number = 1
+    self.buffer = b''
+
     self.last_error = None
 
     self.upload_id = None
@@ -206,12 +208,29 @@ class S3Uploader(Uploader):
       self.last_error = e
 
   def put(self, data):
+
+    MIN_WRITE_SIZE = 5 * 1024 * 1024
+    MAX_WRITE_SIZE = 5 * 1024 * 1024 * 1024
+
+    # TODO: Byte strings might not be the most performant way to handle this
+    self.buffer += data
+
+    while len(self.buffer) >= MIN_WRITE_SIZE:
+      # Take the first chunk off the buffer and write it to S3
+      data = self.buffer[:MAX_WRITE_SIZE]
+      self._write_to_s3(data)
+      # Remove the written chunk from the buffer
+      self.buffer = self.buffer[MAX_WRITE_SIZE:]
+
+    
+  def _write_to_s3(self, data):
+
     try:
       request = messages.UploadPartRequest(self._bucket,
                                            self._name,
                                            self.upload_id,
                                            self.part_number,
-                                           data.tobytes())
+                                           data)
       response = self._client.upload_part(request)
       self.parts.append({'ETag': response.etag,
                          'PartNumber': response.part_number})
@@ -226,6 +245,9 @@ class S3Uploader(Uploader):
         raise
 
   def finish(self):
+
+    self._write_to_s3(self.buffer)
+
     if self.last_error is not None:
       raise self.last_error  # pylint: disable=raising-bad-type
 
