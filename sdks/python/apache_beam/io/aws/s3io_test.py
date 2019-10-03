@@ -174,6 +174,29 @@ class TestS3IO(unittest.TestCase):
     self.assertEqual(
         new_f_contents, contents)
 
+  def test_file_iterator(self):
+    file_name = 's3://random-data-sets/_iterate_file'
+    lines = []
+    line_count = 10
+    for _ in range(line_count):
+      line_length = random.randint(100, 500)
+      line = os.urandom(line_length).replace(b'\n', b' ') + b'\n'
+      lines.append(line)
+
+    contents = b''.join(lines)
+    bucket, name = s3io.parse_s3_path(file_name)
+
+    with self.aws.open(file_name, 'w') as wf:
+      wf.write(contents)
+
+    f = self.aws.open(file_name)
+
+    read_lines = 0
+    for line in f:
+      read_lines += 1
+
+    self.assertEqual(read_lines, line_count)
+
   # def test_list_prefix(self):
   #   bucket_name = 's3-tests'
 
