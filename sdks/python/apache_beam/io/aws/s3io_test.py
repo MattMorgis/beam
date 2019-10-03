@@ -81,7 +81,7 @@ class TestS3IO(unittest.TestCase):
     self.aws = s3io.S3IO()
 
   def test_file_mode(self):
-    file_name = 's3://random-data-sets/jerry/pigpen/phil'
+    file_name = 's3://random-data-sets/jerry/pigpen/bobby'
     with self.aws.open(file_name, 'w') as f:
       assert f.mode == 'w'
     with self.aws.open(file_name, 'r') as f:
@@ -168,7 +168,7 @@ class TestS3IO(unittest.TestCase):
     f.flush()
     f.flush()  # Should be a NOOP.
     f.write(contents[1024 * 1024:])
-    f.close()  # This should already call the equivalent of flush() in its body.
+    f.close()  # This should al`read`y call the equivalent of flush() in its body.
     new_f = self.aws.open(file_name, 'r')
     new_f_contents = new_f.read()
     self.assertEqual(
