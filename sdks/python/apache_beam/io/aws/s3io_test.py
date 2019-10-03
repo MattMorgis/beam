@@ -252,6 +252,22 @@ class TestS3IO(unittest.TestCase):
       self.assertEqual(f.readline(), lines[line_index][chars_left:])
 
 
+  def test_file_close(self):
+    file_name = 's3://random-data-sets/_close_file'
+    file_size = 5 * 1024 * 1024 + 2000
+    contents = os.urandom(file_size)
+    f = self.aws.open(file_name, 'w')
+    self.assertEqual(f.mode, 'w')
+    f.write(contents)
+    f.close()
+    f.close()  # This should not crash.
+
+    with self.aws.open(file_name, 'r') as f:
+      read_contents = f.read()
+
+    self.assertEqual(
+        read_contents, contents)
+
   # def test_list_prefix(self):
   #   bucket_name = 's3-tests'
 
