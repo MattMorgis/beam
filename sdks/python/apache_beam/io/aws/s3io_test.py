@@ -151,10 +151,9 @@ class TestS3IO(unittest.TestCase):
       self.assertEqual(f.tell(), start)
 
       self.assertEqual(
-        f.read(end - start + 1), contents[start:end + 1]
+          f.read(end - start + 1), contents[start:end + 1]
       )
       self.assertEqual(f.tell(), end + 1)
-
 
   def test_file_flush(self):
     file_name = 's3://random-data-sets/_flush_file'
