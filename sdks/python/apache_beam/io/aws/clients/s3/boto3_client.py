@@ -84,7 +84,7 @@ class Client(object):
                                              Key=request.object,
                                              Range='bytes={}-{}'.format(
                                                  start,
-                                                 end))
+                                                 end - 1))
     except ClientError as e:
       s3error = messages.S3ClientError(e.response['Error']['Message'])
       s3error.code = int(e.response['Error']['Code'])
