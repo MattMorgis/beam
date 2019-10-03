@@ -197,6 +197,61 @@ class TestS3IO(unittest.TestCase):
 
     self.assertEqual(read_lines, line_count)
 
+  def test_file_read_line(self):
+    file_name = 's3://random-data-sets/_read_line_file'
+    lines = []
+
+    # Set a small buffer size to exercise refilling the buffer.
+    # First line is carefully crafted so the newline falls as the last character
+    # of the buffer to exercise this code path.
+    read_buffer_size = 1099
+    lines.append(b'x' * 1023 + b'\n')
+
+    for _ in range(1, 1000):
+      line_length = random.randint(100, 500)
+      line = os.urandom(line_length).replace(b'\n', b' ') + b'\n'
+      lines.append(line)
+    contents = b''.join(lines)
+
+    file_size = len(contents)
+    bucket, name = s3io.parse_s3_path(file_name)
+
+    with self.aws.open(file_name, 'wb') as wf:
+      wf.write(contents)
+
+    f = self.aws.open(file_name, 'rb', read_buffer_size=read_buffer_size)
+
+    # Test read of first two lines.
+    f.seek(0)
+    self.assertEqual(f.readline(), lines[0])
+    self.assertEqual(f.tell(), len(lines[0]))
+    self.assertEqual(f.readline(), lines[1])
+
+    # Test read at line boundary.
+    f.seek(file_size - len(lines[-1]) - 1)
+    self.assertEqual(f.readline(), b'\n')
+
+    # Test read at end of file.
+    f.seek(file_size)
+    self.assertEqual(f.readline(), b'')
+
+    # Test reads at random positions.
+    random.seed(0)
+    for _ in range(0, 10):
+      start = random.randint(0, file_size - 1)
+      line_index = 0
+      # Find line corresponding to start index.
+      chars_left = start
+      while True:
+        next_line_length = len(lines[line_index])
+        if chars_left - next_line_length < 0:
+          break
+        chars_left -= next_line_length
+        line_index += 1
+      f.seek(start)
+      self.assertEqual(f.readline(), lines[line_index][chars_left:])
+
+
   # def test_list_prefix(self):
   #   bucket_name = 's3-tests'
 
