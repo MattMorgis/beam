@@ -167,3 +167,13 @@ class Client(object):
                                                  Key=request.object,
                                                  UploadId=request.upload_id,
                                                  MultipartUpload=parts)
+
+  def delete(self, request):
+    try:
+      return self.client.delete_object(Bucket=request.bucket,
+                                      Key=request.object)
+    except ClientError as e:
+      s3error = messages.S3ClientError(e.response['Error']['Message'])
+      s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
+      s3error.message = e.response['Error']['Message']
+      raise s3error
