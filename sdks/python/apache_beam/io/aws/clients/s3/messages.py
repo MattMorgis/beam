@@ -263,6 +263,30 @@ class Item(object):
   def size(self, size):
     self._size = size
 
+class DeleteRequest(object):
+  """
+  S3 request object for `Delete` command
+  """
+
+  def __init__(self, bucket, object):
+    self.bucket = bucket
+    self.object = object
+
+  @property
+  def bucket(self):
+    return self._bucket
+
+  @bucket.setter
+  def bucket(self, bucket):
+    self._bucket = bucket
+
+  @property
+  def object(self):
+    return self._object
+
+  @object.setter
+  def object(self, object):
+    self._object = object
 
 class S3ClientError(Exception):
   message = None

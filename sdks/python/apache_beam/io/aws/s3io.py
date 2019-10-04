@@ -135,6 +135,22 @@ class S3IO(object):
 
     return file_sizes
 
+  @retry.with_exponential_backoff(
+      retry_filter=retry.retry_on_server_errors_and_timeout_filter)
+  def delete(self, path):
+    bucket, object_path = parse_s3_path(path)
+    request = messages.DeleteRequest(bucket, object_path)
+
+    try:
+      self.client.delete(request)
+    except messages.S3ClientError as e:
+      if e.code == 404:
+        raise IOError(errno.ENOENT, 'Not found: %s' % self._path)
+      else:
+        logging.error('HTTP error while requesting file %s: %s', self._path,
+                      3)
+        raise
+
 
 class S3Downloader(Downloader):
   def __init__(self, client, path, buffer_size):
