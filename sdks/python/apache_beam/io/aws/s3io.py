@@ -145,9 +145,9 @@ class S3IO(object):
       self.client.delete(request)
     except messages.S3ClientError as e:
       if e.code == 404:
-        raise IOError(errno.ENOENT, 'Not found: %s' % self._path)
+        raise IOError(errno.ENOENT, 'Not found: %s' % path)
       else:
-        logging.error('HTTP error while requesting file %s: %s', self._path,
+        logging.error('HTTP error while deleting file %s: %s', path,
                       3)
         raise
 
