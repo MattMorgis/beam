@@ -268,6 +268,17 @@ class TestS3IO(unittest.TestCase):
     self.assertEqual(
         read_contents, contents)
 
+  def test_context_manager(self):
+    # Test writing with a context manager.
+    file_name = 's3://random-data-sets/_context_manager_file'
+    file_size = 1024
+    contents = os.urandom(file_size)
+    with self.aws.open(file_name, 'w') as f:
+      f.write(contents)
+    bucket, name = s3io.parse_s3_path(file_name)
+    with self.aws.open(file_name, 'r') as f:
+      self.assertEqual(f.read(), contents)
+
   # def test_list_prefix(self):
   #   bucket_name = 's3-tests'
 
