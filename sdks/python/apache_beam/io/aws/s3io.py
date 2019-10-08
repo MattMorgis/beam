@@ -204,7 +204,7 @@ class S3Uploader(Uploader):
 
     self.upload_id = None
 
-    self.parts =  []
+    self.parts = []
 
     self._start_upload()
 
@@ -222,6 +222,7 @@ class S3Uploader(Uploader):
       logging.error('Error in _start_upload while inserting file %s: %s',
                     self._path, traceback.format_exc())
       self.last_error = e
+      raise e
 
   def put(self, data):
 
@@ -238,7 +239,6 @@ class S3Uploader(Uploader):
       # Remove the written chunk from the buffer
       self.buffer = self.buffer[MAX_WRITE_SIZE:]
 
-    
   def _write_to_s3(self, data):
 
     try:

@@ -53,7 +53,7 @@ class Client(object):
       boto_response = self.client.head_object(**kwargs)
     except ClientError as e:
       s3error = messages.S3ClientError(e.response['Error']['Message'])
-      s3error.code = int(e.response['Error']['Code'])
+      s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
       s3error.message = e.response['Error']['Message']
       raise s3error
     except NoCredentialsError as e:
@@ -87,7 +87,7 @@ class Client(object):
                                                  end - 1))
     except ClientError as e:
       s3error = messages.S3ClientError(e.response['Error']['Message'])
-      s3error.code = int(e.response['Error']['Code'])
+      s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
       s3error.message = e.response['Error']['Message']
       raise s3error
     except NoCredentialsError as e:
@@ -136,8 +136,19 @@ class Client(object):
     Returns:
       (UploadResponse) The response message.
     """
-    response = self.client.create_multipart_upload(Bucket=request.bucket,
-                                                   Key=request.object)
+    try:
+      response = self.client.create_multipart_upload(Bucket=request.bucket,
+                                                     Key=request.object)
+    except ClientError as e:
+      s3error = messages.S3ClientError(e.response['Error']['Message'])
+      s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
+      s3error.message = e.response['Error']['Message']
+      raise s3error
+    except NoCredentialsError as e:
+      s3error = messages.S3ClientError(e.response['Error']['Message'])
+      s3error.code = 400
+      s3error.message = e.response['Error']['Message']
+      raise s3error
     return response
 
   def upload_part(self, request):
@@ -152,7 +163,7 @@ class Client(object):
       return respnose_message
     except ClientError as e:
       s3error = messages.S3ClientError(e.response['Error']['Message'])
-      s3error.code = int(e.response['Error']['Code'])
+      s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
       s3error.message = e.response['Error']['Message']
       raise s3error
     except NoCredentialsError as e:
@@ -170,8 +181,9 @@ class Client(object):
 
   def delete(self, request):
     try:
-      return self.client.delete_object(Bucket=request.bucket,
-                                      Key=request.object)
+      response = self.client.delete_object(Bucket=request.bucket,
+                                           Key=request.object)
+      return response
     except ClientError as e:
       s3error = messages.S3ClientError(e.response['Error']['Message'])
       s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
