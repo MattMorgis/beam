@@ -176,7 +176,7 @@ class UploadPartResponse(object):
     self._part_number = part_number
 
 
-class UploadMultipartUploadRequest(object):
+class CompleteMultipartUploadRequest(object):
   """
   S3 request object for `UploadPart` command
   """
@@ -217,8 +217,8 @@ class UploadMultipartUploadRequest(object):
   def parts(self):
     return self._parts
 
-  @part_number.setter
-  def parts(self, part_number):
+  @parts.setter
+  def parts(self, parts):
     self._parts = parts
 
   @property
