@@ -176,6 +176,60 @@ class UploadPartResponse(object):
     self._part_number = part_number
 
 
+class UploadMultipartUploadRequest(object):
+  """
+  S3 request object for `UploadPart` command
+  """
+
+  def __init__(self, bucket, object, upload_id, parts):
+    # parts is a list of objects of the form {'ETag': response.etag, 'PartNumber': response.part_number}
+    self.bucket = bucket
+    self.object = object
+    self.upload_id = upload_id
+    self.parts = parts
+    # self.mime_type = mime_type
+
+  @property
+  def bucket(self):
+    return self._bucket
+
+  @bucket.setter
+  def bucket(self, bucket):
+    self._bucket = bucket
+
+  @property
+  def object(self):
+    return self._object
+
+  @object.setter
+  def object(self, object):
+    self._object = object
+
+  @property
+  def upload_id(self):
+    return self._upload_id
+
+  @upload_id.setter
+  def upload_id(self, upload_id):
+    self._upload_id = upload_id
+
+  @property
+  def parts(self):
+    return self._parts
+
+  @part_number.setter
+  def parts(self, part_number):
+    self._parts = parts
+
+  @property
+  def bytes(self):
+    return self._bytes
+
+  @bytes.setter
+  def bytes(self, bytes):
+    self._bytes = bytes
+
+
 class ListRequest(object):
   """
   S3 request object for `List` command

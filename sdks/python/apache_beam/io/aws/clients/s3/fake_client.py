@@ -47,6 +47,7 @@ class FakeS3Client(object):
   def __init__(self):
     self.files = {}
     self.list_continuation_tokens = {}
+    self.multipart_uploads = {}
 
   def add_file(self, f):
     self.files[(f.bucket, f.key)] = f
@@ -100,14 +101,42 @@ class FakeS3Client(object):
   def create_multipart_upload(self, request):
     # Create hash of bucket and key
     # Store upload_id internally
-    return messages.UploadResponse('xxxxxxx')
+    upload_id = request.bucket + request.object
+    self.multipart_uploads[upload_id] = {}
+    return messages.UploadResponse(upload_id)
 
   def upload_part(self, request):
     # Save off bytes passed to internal data store
-    return
+    # TODO: What if the request sends an ID that we don't have?
+    # TODO: Make sure that the part_number is a number
+    # TODO: Make sure that the size of the part falls within the bounds
+    upload_id, part_number = request.upload_id, request.part_number
+    self.multipart_uploads[upload_id][part_number] = request.bytes
+
+    etag = 'xxxxx-fake-etag'
+    return messages.UploadPartResponse(etag, part_number)
 
   def complete_multipart_upload(self, request):
+
+    parts_received = self.multipart_uploads[request.upload_id]
+
+    # Check that we got all the parts that they intended to send
+    part_numbers_to_confirm = set(part['PartNumber'] for part in request.parts)
+
+    # TODO: What if they didn't send us enough parts / sent us too many parts?
+    if part_numbers_to_confirm != set(parts_received.keys()):
+      raise # Fill it in with a real message later
+
     # String together all bytes for the given upload
+
+    # Check that all the part numbers are there
+
+    # Sort by part number
+
+    # TODO: Is there a better way to do this?
+    final_bytes = b''.join()
+
     # Create FakeFile object
+
     # Store FakeFile in self.files
     return
