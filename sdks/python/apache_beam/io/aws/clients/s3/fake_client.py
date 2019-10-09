@@ -17,6 +17,8 @@
 
 from __future__ import absolute_import
 
+import os
+
 from apache_beam.io.aws.clients.s3 import messages
 
 
@@ -24,6 +26,7 @@ class FakeFile(object):
   def __init__(self, bucket, key, size, last_modified=None):
     self.bucket = bucket
     self.key = key
+    self.contents = os.urandom(size)
     self.size = size
     self.last_modified = last_modified
     self.etag = 'xxxxxxxx'
@@ -37,7 +40,7 @@ class FakeFile(object):
     return messages.Item(self.etag,
                          self.key,
                          last_modified_datetime,
-                         len(self.size))
+                         len(self.contents))
 
 
 class FakeS3Client(object):
@@ -93,3 +96,18 @@ class FakeS3Client(object):
       s3error = messages.S3ClientError()
       s3error.code, s3error.message = 404, 'The specified bucket does not exist'
       raise s3error
+
+  def create_multipart_upload(self, request):
+    # Create hash of bucket and key
+    # Store upload_id internally
+    return messages.UploadResponse('xxxxxxx')
+
+  def upload_part(self, request):
+    # Save off bytes passed to internal data store
+    return
+
+  def complete_multipart_upload(self, request):
+    # String together all bytes for the given upload
+    # Create FakeFile object
+    # Store FakeFile in self.files
+    return

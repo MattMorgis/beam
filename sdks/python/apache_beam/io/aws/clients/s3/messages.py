@@ -44,30 +44,21 @@ class GetRequest(object):
     self._object = object
 
 
-class UploadPartResponse(object):
+class UploadResponse(object):
   """
-  S3 response object for `UploadPart` command
+  S3 response object for `StartUpload` command
   """
 
-  def __init__(self, etag, part_number):
-    self.etag = etag
-    self.part_number = part_number
+  def __init__(self, upload_id):
+    self.upload_id = upload_id
 
   @property
-  def etag(self):
-    return self._etag
+  def upload_id(self):
+    return self._upload_id
 
-  @etag.setter
-  def etag(self, etag):
-    self._etag = etag
-
-  @property
-  def part_number(self):
-    return self._part_number
-
-  @part_number.setter
-  def part_number(self, part_number):
-    self._part_number = part_number
+  @upload_id.setter
+  def upload_id(self, upload_id):
+    self._upload_id = upload_id
 
 
 class UploadRequest(object):
@@ -157,6 +148,32 @@ class UploadPartRequest(object):
   @bytes.setter
   def bytes(self, bytes):
     self._bytes = bytes
+
+
+class UploadPartResponse(object):
+  """
+  S3 response object for `UploadPart` command
+  """
+
+  def __init__(self, etag, part_number):
+    self.etag = etag
+    self.part_number = part_number
+
+  @property
+  def etag(self):
+    return self._etag
+
+  @etag.setter
+  def etag(self, etag):
+    self._etag = etag
+
+  @property
+  def part_number(self):
+    return self._part_number
+
+  @part_number.setter
+  def part_number(self, part_number):
+    self._part_number = part_number
 
 
 class ListRequest(object):
@@ -263,6 +280,7 @@ class Item(object):
   def size(self, size):
     self._size = size
 
+
 class DeleteRequest(object):
   """
   S3 request object for `Delete` command
@@ -287,6 +305,7 @@ class DeleteRequest(object):
   @object.setter
   def object(self, object):
     self._object = object
+
 
 class S3ClientError(Exception):
   message = None

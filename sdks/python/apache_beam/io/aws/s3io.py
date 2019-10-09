@@ -217,7 +217,7 @@ class S3Uploader(Uploader):
     try:
       request = messages.UploadRequest(self._bucket, self._name, None)
       response = self._client.create_multipart_upload(request)
-      self.upload_id = response['UploadId']
+      self.upload_id = response.upload_id
     except Exception as e:  # pylint: disable=broad-except
       logging.error('Error in _start_upload while inserting file %s: %s',
                     self._path, traceback.format_exc())

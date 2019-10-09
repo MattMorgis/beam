@@ -129,7 +129,7 @@ class Client(object):
     return response
 
   def create_multipart_upload(self, request):
-    r"""Retrieves a list of objects matching the criteria.
+    r"""Initates a multipart upload to S3 for a given object
 
     Args:
       request: (UploadRequest) input message
@@ -137,8 +137,9 @@ class Client(object):
       (UploadResponse) The response message.
     """
     try:
-      response = self.client.create_multipart_upload(Bucket=request.bucket,
-                                                     Key=request.object)
+      boto_response = self.client.create_multipart_upload(Bucket=request.bucket,
+                                                          Key=request.object)
+      response = messages.UploadResponse(boto_response['UploadId'])
     except ClientError as e:
       s3error = messages.S3ClientError(e.response['Error']['Message'])
       s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
@@ -152,15 +153,22 @@ class Client(object):
     return response
 
   def upload_part(self, request):
+    r"""Uploads part of a file to S3 during a multipart upload
+
+    Args:
+      request: (UploadPartRequest) input message
+    Returns:
+      (UploadPartResponse) The response message.
+    """
     try:
-      response = self.client.upload_part(Body=request.bytes,
-                                         Bucket=request.bucket,
-                                         Key=request.object,
-                                         PartNumber=request.part_number,
-                                         UploadId=request.upload_id)
-      respnose_message = messages.UploadPartResponse(response['ETag'],
-                                                     request.part_number)
-      return respnose_message
+      boto_response = self.client.upload_part(Body=request.bytes,
+                                              Bucket=request.bucket,
+                                              Key=request.object,
+                                              PartNumber=request.part_number,
+                                              UploadId=request.upload_id)
+      response = messages.UploadPartResponse(boto_response['ETag'],
+                                             request.part_number)
+      return response
     except ClientError as e:
       s3error = messages.S3ClientError(e.response['Error']['Message'])
       s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
@@ -173,19 +181,26 @@ class Client(object):
       raise s3error
 
   def complete_multipart_upload(self, request):
-    parts = {'Parts': request.part_number}
-    return self.client.complete_multipart_upload(Bucket=request.bucket,
-                                                 Key=request.object,
-                                                 UploadId=request.upload_id,
-                                                 MultipartUpload=parts)
-  r"""Deletes given object from bucket
-   Args:
-      request: (DeleteRequest) input message
+    r"""Completes a multipart upload to S3
+
+    Args:
+      request: (UploadPartRequest) input message
     Returns:
-      (DeleteResponse) The response message.
-  """
+      (Void) The response message.
+    """
+    parts = {'Parts': request.part_number}
+    self.client.complete_multipart_upload(Bucket=request.bucket,
+                                          Key=request.object,
+                                          UploadId=request.upload_id,
+                                          MultipartUpload=parts)
 
   def delete(self, request):
+    r"""Deletes given object from bucket
+    Args:
+        request: (DeleteRequest) input message
+      Returns:
+        (void) Void, otherwise will raise if an error occurs
+    """
     try:
       self.client.delete_object(Bucket=request.bucket,
                                 Key=request.object)
