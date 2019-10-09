@@ -76,21 +76,21 @@ class TestS3IO(unittest.TestCase):
     return f
 
   def setUp(self):
-    # self.client = fake_client.FakeS3Client()
-    # self.aws = s3io.S3IO(self.client)
-    self.aws = s3io.S3IO()
+    self.client = fake_client.FakeS3Client()
+    self.aws = s3io.S3IO(self.client)
+    # self.aws = s3io.S3IO()
 
   def test_delete(self):
     file_name = 's3://random-data-sets/_delete_file'
     file_size = 1024
-    contents = os.urandom(file_size)
 
     # Test deletion of non-existent file (shouldn't raise any error)
     self.aws.delete(file_name)
 
     # Create the file and check that it was created
-    with self.aws.open(file_name, 'w') as f:
-      f.write(contents)
+    # with self.aws.open(file_name, 'w') as f:
+    #   f.write(contents)
+    self._insert_random_file(self.client, file_name, file_size)
     files = self.aws.list_prefix('s3://random-data-sets/')
     self.assertTrue(file_name in files)
 

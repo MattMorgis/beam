@@ -54,14 +54,6 @@ class FakeS3Client(object):
   def delete_file(self, bucket, obj):
     del self.files[(bucket, obj)]
 
-  def Delete(self, delete_request):  # pylint: disable=invalid-name
-    if self.get_file(delete_request.bucket, delete_request.object):
-      self.delete_file(delete_request.bucket, delete_request.object)
-    else:
-      raise HttpError(
-          httplib2.Response({'status': '404'}), '404 Not Found',
-          'https://fake/url')
-
   def list(self, request):
     bucket = request.bucket
     prefix = request.prefix or ''
@@ -94,12 +86,6 @@ class FakeS3Client(object):
 
     return result
 
-  def delete(self, request):
-    try:
-      return self.client.delete_object(Bucket=request.bucket,
-                                       Key=request.object)
-    except ClientError as e:
-      s3error = messages.S3ClientError(e.response['Error']['Message'])
-      s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
-      s3error.message = e.response['Error']['Message']
-      raise s3error
+  def delete(self, delete_request):
+    if self.get_file(delete_request.bucket, delete_request.object):
+      self.delete_file(delete_request.bucket, delete_request.object)
