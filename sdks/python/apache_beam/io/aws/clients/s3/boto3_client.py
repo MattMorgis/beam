@@ -74,10 +74,8 @@ class Client(object):
 
       Args:
         request: (GetRequest) request
-        downloader: (Downloader) Download
-            data from the request via this stream.
       Returns:
-        (Object) The response message.
+        (bytes) The response message.
       """
     try:
       boto_response = self.client.get_object(Bucket=request.bucket,
@@ -96,7 +94,7 @@ class Client(object):
       s3error.message = e.response['Error']['Message']
       raise s3error
 
-    return boto_response['Body'].read()
+    return boto_response['Body'].read() # A bytes object
 
   def list(self, request):
     r"""Retrieves a list of objects matching the criteria.

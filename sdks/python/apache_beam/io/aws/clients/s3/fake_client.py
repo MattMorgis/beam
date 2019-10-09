@@ -104,6 +104,20 @@ class FakeS3Client(object):
 
     return result
 
+  def get_range(self, request, start, end):
+    r"""Retrieves an object.
+
+      Args:
+        request: (GetRequest) request
+      Returns:
+        (bytes) The response message.
+      """
+    # TODO: What if the bucket / key pair doesn't exist?
+    # TODO: What if the range is bad? (Start/end too big/small, etc.)
+
+    file_ = self.get_file(request.bucket, request.object)
+    return file_.contents[start:end]
+
   def delete(self, delete_request):
     if self.get_file(delete_request.bucket, delete_request.object):
       self.delete_file(delete_request.bucket, delete_request.object)
