@@ -145,7 +145,7 @@ class S3IO(object):
       self.client.delete(request)
     except messages.S3ClientError as e:
       if e.code == 404:
-        raise IOError(errno.ENOENT, 'Not found: %s' % path)
+        return # Same behavior as GCS - don't surface a 404 error
       else:
         logging.error('HTTP error while deleting file %s: %s', path,
                       3)
