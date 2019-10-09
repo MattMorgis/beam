@@ -267,9 +267,8 @@ class S3Uploader(Uploader):
     if self.last_error is not None:
       raise self.last_error  # pylint: disable=raising-bad-type
 
-    request = messages.UploadPartRequest(self._bucket,
-                                         self._name,
-                                         self.upload_id,
-                                         self.parts,
-                                         None)
+    request = messages.CompleteMultipartUploadRequest(self._bucket,
+                                                      self._name,
+                                                      self.upload_id,
+                                                      self.parts)
     self._client.complete_multipart_upload(request)

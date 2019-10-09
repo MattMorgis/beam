@@ -71,7 +71,8 @@ class TestS3IO(unittest.TestCase):
 
   def _insert_random_file(self, client, path, size):
     bucket, name = s3io.parse_s3_path(path)
-    f = fake_client.FakeFile(bucket, name, size)
+    contents = os.urandom(size)
+    f = fake_client.FakeFile(bucket, name, contents)
     client.add_file(f)
     return f
 

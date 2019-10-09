@@ -23,11 +23,11 @@ from apache_beam.io.aws.clients.s3 import messages
 
 
 class FakeFile(object):
-  def __init__(self, bucket, key, size, last_modified=None):
+
+  def __init__(self, bucket, key, contents, last_modified=None):
     self.bucket = bucket
     self.key = key
-    self.contents = os.urandom(size)
-    self.size = size
+    self.contents = contents
     self.last_modified = last_modified
     self.etag = 'xxxxxxxx'
 
@@ -57,6 +57,20 @@ class FakeS3Client(object):
 
   def delete_file(self, bucket, obj):
     del self.files[(bucket, obj)]
+
+  def get_object_metadata(self, request):
+    r"""Retrieves an object's metadata.
+
+    Args:
+      request: (GetRequest) input message
+
+    Returns:
+      (Item) The response message.
+    """
+    # TODO: What if there isn't a file for the bucket / key pair?
+    # TODO: Do we want to mock out a lack of credentials?
+    file_ = self.get_file(request.bucket, request.object)
+    return file_.get_metadata()
 
   def list(self, request):
     bucket = request.bucket
@@ -108,7 +122,7 @@ class FakeS3Client(object):
   def upload_part(self, request):
     # Save off bytes passed to internal data store
     # TODO: What if the request sends an ID that we don't have?
-    # TODO: Make sure that the part_number is a number
+    # TODO: Make sure that the part_number is a positive int
     # TODO: Make sure that the size of the part falls within the bounds
     upload_id, part_number = request.upload_id, request.part_number
     self.multipart_uploads[upload_id][part_number] = request.bytes
@@ -127,16 +141,15 @@ class FakeS3Client(object):
     if part_numbers_to_confirm != set(parts_received.keys()):
       raise # Fill it in with a real message later
 
-    # String together all bytes for the given upload
-
-    # Check that all the part numbers are there
-
     # Sort by part number
+    sorted_parts = sorted(parts_received.items(), key=lambda pair: pair[0])
+    sorted_bytes = [bytes_ for (part_number, bytes_) in sorted_parts]
 
-    # TODO: Is there a better way to do this?
-    final_bytes = b''.join()
+    # String together all bytes for the given upload
+    final_contents = b''.join(sorted_bytes)
 
     # Create FakeFile object
+    file_ = FakeFile(request.bucket, request.object, final_contents)
 
     # Store FakeFile in self.files
-    return
+    self.files[(request.bucket, request.object)] = file_
