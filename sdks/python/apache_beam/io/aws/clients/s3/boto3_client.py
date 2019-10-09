@@ -188,7 +188,7 @@ class Client(object):
     Returns:
       (Void) The response message.
     """
-    parts = {'Parts': request.part_number}
+    parts = {'Parts': request.parts}
     self.client.complete_multipart_upload(Bucket=request.bucket,
                                           Key=request.object,
                                           UploadId=request.upload_id,
