@@ -53,7 +53,10 @@ class FakeS3Client(object):
     self.files[(f.bucket, f.key)] = f
 
   def get_file(self, bucket, obj):
-    return self.files.get((bucket, obj), None)
+    try:
+      return self.files[bucket, obj]
+    except:
+      raise messages.S3ClientError('Not found', 404)
 
   def delete_file(self, bucket, obj):
     del self.files[(bucket, obj)]

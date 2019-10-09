@@ -5,8 +5,8 @@ from apache_beam.io.aws.clients.s3 import boto3_client, fake_client, messages
 class ClientErrorTest(unittest.TestCase):
 
   def setUp(self):
-    # self.client = fake_client.FakeS3Client()
-    self.client = boto3_client.Client()
+    self.client = fake_client.FakeS3Client()
+    # self.client = boto3_client.Client()
   
   def test_get_object_metadata(self):
     
