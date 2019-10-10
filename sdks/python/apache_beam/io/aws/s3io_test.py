@@ -77,9 +77,9 @@ class TestS3IO(unittest.TestCase):
     return f
 
   def setUp(self):
-    # self.client = fake_client.FakeS3Client()
-    # self.aws = s3io.S3IO(self.client)
-    self.aws = s3io.S3IO()
+    self.client = fake_client.FakeS3Client()
+    self.aws = s3io.S3IO(self.client)
+    # self.aws = s3io.S3IO()
 
   def test_delete(self):
     file_name = 's3://random-data-sets/_delete_file'
@@ -109,14 +109,18 @@ class TestS3IO(unittest.TestCase):
 
   def test_full_file_read(self):
     file_name = 's3://random-data-sets/jerry/pigpen/phil'
-    file_size = 5
+    file_size = 1024
+
+    f = self._insert_random_file(self.client, file_name, file_size)
+    contents = f.contents
+
     f = self.aws.open(file_name)
     self.assertEqual(f.mode, 'r')
     f.seek(0, os.SEEK_END)
     self.assertEqual(f.tell(), file_size)
     self.assertEqual(f.read(), b'')
     f.seek(0)
-    self.assertEqual(f.read(), b'phil\n')
+    self.assertEqual(f.read(), contents)
 
   def test_file_write(self):
     file_name = 's3://random-data-sets/_write_file'
