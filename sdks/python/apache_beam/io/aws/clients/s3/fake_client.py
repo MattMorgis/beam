@@ -56,7 +56,7 @@ class FakeS3Client(object):
     try:
       return self.files[bucket, obj]
     except:
-      raise messages.S3ClientError('Not found', 404)
+      raise messages.S3ClientError('Not Found', 404)
 
   def delete_file(self, bucket, obj):
     del self.files[(bucket, obj)]
@@ -70,7 +70,6 @@ class FakeS3Client(object):
     Returns:
       (Item) The response message.
     """
-    # TODO: What if there isn't a file for the bucket / key pair?
     # TODO: Do we want to mock out a lack of credentials?
     file_ = self.get_file(request.bucket, request.object)
     return file_.get_metadata()
@@ -115,10 +114,13 @@ class FakeS3Client(object):
       Returns:
         (bytes) The response message.
       """
-    # TODO: What if the bucket / key pair doesn't exist?
-    # TODO: What if the range is bad? (Start/end too big/small, etc.)
 
     file_ = self.get_file(request.bucket, request.object)
+
+    # Replicates S3's behavior, per the spec here: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35
+    if start < 0 or end <= start:
+      return file_.contents
+    
     return file_.contents[start:end]
 
   def delete(self, delete_request):
