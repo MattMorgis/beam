@@ -140,29 +140,40 @@ class FakeS3Client(object):
 
   def upload_part(self, request):
     # Save off bytes passed to internal data store
-    # TODO: What if the request sends an ID that we don't have?
-    # TODO: Make sure that the part_number is a positive int
-    # TODO: Make sure that the size of the part falls within the bounds
     upload_id, part_number = request.upload_id, request.part_number
+
+    if part_number < 0 or not isinstance(part_number, int):
+      raise messages.S3ClientError('Param validation failed on part number', 400)
+
+    if upload_id not in self.multipart_uploads:
+      raise messages.S3ClientError('The specified upload does not exist', 404)
+
     self.multipart_uploads[upload_id][part_number] = request.bytes
 
     etag = 'xxxxx-fake-etag'
     return messages.UploadPartResponse(etag, part_number)
 
   def complete_multipart_upload(self, request):
+    MIN_PART_SIZE = 5 * 2**10 # 5 KiB
 
     parts_received = self.multipart_uploads[request.upload_id]
 
     # Check that we got all the parts that they intended to send
     part_numbers_to_confirm = set(part['PartNumber'] for part in request.parts)
 
-    # TODO: What if they didn't send us enough parts / sent us too many parts?
+    # Make sure all the expected parts are present
     if part_numbers_to_confirm != set(parts_received.keys()):
-      raise # Fill it in with a real message later
+      raise messages.S3ClientError('One or more of the specified parts could not be found', 400)
 
     # Sort by part number
     sorted_parts = sorted(parts_received.items(), key=lambda pair: pair[0])
     sorted_bytes = [bytes_ for (part_number, bytes_) in sorted_parts]
+
+    # Make sure that the parts aren't too small (except the last part)
+    part_sizes = [len(bytes_) for bytes_ in sorted_bytes]
+    if any(size < MIN_PART_SIZE for size in part_sizes[:-1]):
+      e_message = 'All parts but the last must be larger than %d bytes' % MIN_PART_SIZE
+      raise messages.S3ClientError(e_message, 400)
 
     # String together all bytes for the given upload
     final_contents = b''.join(sorted_bytes)

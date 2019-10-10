@@ -24,7 +24,7 @@ try:
   # pylint: disable=wrong-import-order, wrong-import-position
   # pylint: disable=ungrouped-imports
   import boto3
-  from botocore.exceptions import ClientError, NoCredentialsError
+  from botocore.exceptions import ClientError, NoCredentialsError, ParamValidationError
 
 except ImportError:
   raise ImportError('Missing `boto3` requirement')
@@ -172,6 +172,8 @@ class Client(object):
       s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
       s3error.message = e.response['Error']['Message']
       raise s3error
+    except ParamValidationError as e:
+      raise messages.S3ClientError(e.kwargs['report'], 400)
     except NoCredentialsError as e:
       s3error = messages.S3ClientError(e.response['Error']['Message'])
       s3error.code = 400
@@ -187,10 +189,16 @@ class Client(object):
       (Void) The response message.
     """
     parts = {'Parts': request.parts}
-    self.client.complete_multipart_upload(Bucket=request.bucket,
-                                          Key=request.object,
-                                          UploadId=request.upload_id,
-                                          MultipartUpload=parts)
+    try:
+      self.client.complete_multipart_upload(Bucket=request.bucket,
+                                            Key=request.object,
+                                            UploadId=request.upload_id,
+                                            MultipartUpload=parts)
+    except ClientError as e:
+      s3error = messages.S3ClientError(e.response['Error']['Message'])
+      s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
+      s3error.message = e.response['Error']['Message']
+      raise s3error
 
   def delete(self, request):
     r"""Deletes given object from bucket
