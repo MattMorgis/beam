@@ -94,7 +94,7 @@ class TestS3IO(unittest.TestCase):
     # Create the file and check that it was created
     # with self.aws.open(file_name, 'w') as f:
     #   f.write(contents)
-    self._insert_random_file(self.client, file_name, file_size)
+    self._insert_random_file(self.aws.client, file_name, file_size)
     files = self.aws.list_prefix('s3://random-data-sets/')
     self.assertTrue(file_name in files)
 
@@ -114,7 +114,7 @@ class TestS3IO(unittest.TestCase):
     file_name = 's3://random-data-sets/jerry/pigpen/phil'
     file_size = 1024
 
-    f = self._insert_random_file(self.client, file_name, file_size)
+    f = self._insert_random_file(self.aws.client, file_name, file_size)
     contents = f.contents
 
     f = self.aws.open(file_name)
@@ -308,7 +308,7 @@ class TestS3IO(unittest.TestCase):
       self.assertEqual(f.read(), contents)
 
   def test_list_prefix(self):
-    bucket_name = 's3-tests'
+    bucket_name = 'random-data-sets'
 
     objects = [
         ('jerry/pigpen/phil', 5),
@@ -318,20 +318,20 @@ class TestS3IO(unittest.TestCase):
 
     for (object_name, size) in objects:
       file_name = 's3://%s/%s' % (bucket_name, object_name)
-      self._insert_random_file(self.client, file_name, size)
+      self._insert_random_file(self.aws.client, file_name, size)
 
     test_cases = [
-        ('s3://s3-tests/j', [
+        ('s3://random-data-sets/j', [
             ('jerry/pigpen/phil', 5),
             ('jerry/pigpen/bobby', 3),
             ('jerry/billy/bobby', 4),
         ]),
-        ('s3://s3-tests/jerry/', [
+        ('s3://random-data-sets/jerry/', [
             ('jerry/pigpen/phil', 5),
             ('jerry/pigpen/bobby', 3),
             ('jerry/billy/bobby', 4),
         ]),
-        ('s3://s3-tests/jerry/pigpen/phil', [
+        ('s3://random-data-sets/jerry/pigpen/phil', [
             ('jerry/pigpen/phil', 5),
         ]),
     ]
