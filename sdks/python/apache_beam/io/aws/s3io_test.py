@@ -72,14 +72,17 @@ class TestS3IO(unittest.TestCase):
   def _insert_random_file(self, client, path, size):
     bucket, name = s3io.parse_s3_path(path)
     contents = os.urandom(size)
-    f = fake_client.FakeFile(bucket, name, contents)
-    client.add_file(f)
-    return f
+    fakeFile = fake_client.FakeFile(bucket, name, contents)
+    # client.add_file(f)
+    f = self.aws.open(path, 'w')
+    f.write(contents)
+    f.close()
+    return fakeFile
 
   def setUp(self):
-    self.client = fake_client.FakeS3Client()
-    self.aws = s3io.S3IO(self.client)
-    # self.aws = s3io.S3IO()
+    # self.client = fake_client.FakeS3Client()
+    # self.aws = s3io.S3IO(self.client)
+    self.aws = s3io.S3IO()
 
   def test_delete(self):
     file_name = 's3://random-data-sets/_delete_file'
