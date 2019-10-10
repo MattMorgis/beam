@@ -23,11 +23,11 @@ from apache_beam.io.aws.clients.s3 import messages
 
 
 class FakeFile(object):
-  def __init__(self, bucket, key, size, last_modified=None):
+
+  def __init__(self, bucket, key, contents, last_modified=None):
     self.bucket = bucket
     self.key = key
-    self.contents = os.urandom(size)
-    self.size = size
+    self.contents = contents
     self.last_modified = last_modified
     self.etag = 'xxxxxxxx'
 
@@ -53,10 +53,26 @@ class FakeS3Client(object):
     self.files[(f.bucket, f.key)] = f
 
   def get_file(self, bucket, obj):
-    return self.files.get((bucket, obj), None)
+    try:
+      return self.files[bucket, obj]
+    except:
+      raise messages.S3ClientError('Not Found', 404)
 
   def delete_file(self, bucket, obj):
     del self.files[(bucket, obj)]
+
+  def get_object_metadata(self, request):
+    r"""Retrieves an object's metadata.
+
+    Args:
+      request: (GetRequest) input message
+
+    Returns:
+      (Item) The response message.
+    """
+    # TODO: Do we want to mock out a lack of credentials?
+    file_ = self.get_file(request.bucket, request.object)
+    return file_.get_metadata()
 
   def list(self, request):
     bucket = request.bucket
@@ -90,6 +106,23 @@ class FakeS3Client(object):
 
     return result
 
+  def get_range(self, request, start, end):
+    r"""Retrieves an object.
+
+      Args:
+        request: (GetRequest) request
+      Returns:
+        (bytes) The response message.
+      """
+
+    file_ = self.get_file(request.bucket, request.object)
+
+    # Replicates S3's behavior, per the spec here: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35
+    if start < 0 or end <= start:
+      return file_.contents
+    
+    return file_.contents[start:end]
+
   def delete(self, delete_request):
     if self.get_file(delete_request.bucket, delete_request.object):
       self.delete_file(delete_request.bucket, delete_request.object)
@@ -107,36 +140,46 @@ class FakeS3Client(object):
 
   def upload_part(self, request):
     # Save off bytes passed to internal data store
-    # TODO: What if the request sends an ID that we don't have?
-    # TODO: Make sure that the part_number is a number
-    # TODO: Make sure that the size of the part falls within the bounds
     upload_id, part_number = request.upload_id, request.part_number
+
+    if part_number < 0 or not isinstance(part_number, int):
+      raise messages.S3ClientError('Param validation failed on part number', 400)
+
+    if upload_id not in self.multipart_uploads:
+      raise messages.S3ClientError('The specified upload does not exist', 404)
+
     self.multipart_uploads[upload_id][part_number] = request.bytes
 
     etag = 'xxxxx-fake-etag'
     return messages.UploadPartResponse(etag, part_number)
 
   def complete_multipart_upload(self, request):
+    MIN_PART_SIZE = 5 * 2**10 # 5 KiB
 
     parts_received = self.multipart_uploads[request.upload_id]
 
     # Check that we got all the parts that they intended to send
     part_numbers_to_confirm = set(part['PartNumber'] for part in request.parts)
 
-    # TODO: What if they didn't send us enough parts / sent us too many parts?
+    # Make sure all the expected parts are present
     if part_numbers_to_confirm != set(parts_received.keys()):
-      raise # Fill it in with a real message later
-
-    # String together all bytes for the given upload
-
-    # Check that all the part numbers are there
+      raise messages.S3ClientError('One or more of the specified parts could not be found', 400)
 
     # Sort by part number
+    sorted_parts = sorted(parts_received.items(), key=lambda pair: pair[0])
+    sorted_bytes = [bytes_ for (part_number, bytes_) in sorted_parts]
 
-    # TODO: Is there a better way to do this?
-    final_bytes = b''.join()
+    # Make sure that the parts aren't too small (except the last part)
+    part_sizes = [len(bytes_) for bytes_ in sorted_bytes]
+    if any(size < MIN_PART_SIZE for size in part_sizes[:-1]):
+      e_message = 'All parts but the last must be larger than %d bytes' % MIN_PART_SIZE
+      raise messages.S3ClientError(e_message, 400)
+
+    # String together all bytes for the given upload
+    final_contents = b''.join(sorted_bytes)
 
     # Create FakeFile object
+    file_ = FakeFile(request.bucket, request.object, final_contents)
 
     # Store FakeFile in self.files
-    return
+    self.files[(request.bucket, request.object)] = file_

@@ -71,14 +71,18 @@ class TestS3IO(unittest.TestCase):
 
   def _insert_random_file(self, client, path, size):
     bucket, name = s3io.parse_s3_path(path)
-    f = fake_client.FakeFile(bucket, name, size)
-    client.add_file(f)
-    return f
+    contents = os.urandom(size)
+    fakeFile = fake_client.FakeFile(bucket, name, contents)
+    # client.add_file(f)
+    f = self.aws.open(path, 'w')
+    f.write(contents)
+    f.close()
+    return fakeFile
 
   def setUp(self):
-    self.client = fake_client.FakeS3Client()
-    self.aws = s3io.S3IO(self.client)
-    # self.aws = s3io.S3IO()
+    # self.client = fake_client.FakeS3Client()
+    # self.aws = s3io.S3IO(self.client)
+    self.aws = s3io.S3IO()
 
   def test_delete(self):
     file_name = 's3://random-data-sets/_delete_file'
@@ -90,7 +94,7 @@ class TestS3IO(unittest.TestCase):
     # Create the file and check that it was created
     # with self.aws.open(file_name, 'w') as f:
     #   f.write(contents)
-    self._insert_random_file(self.client, file_name, file_size)
+    self._insert_random_file(self.aws.client, file_name, file_size)
     files = self.aws.list_prefix('s3://random-data-sets/')
     self.assertTrue(file_name in files)
 
@@ -108,14 +112,18 @@ class TestS3IO(unittest.TestCase):
 
   def test_full_file_read(self):
     file_name = 's3://random-data-sets/jerry/pigpen/phil'
-    file_size = 5
+    file_size = 1024
+
+    f = self._insert_random_file(self.aws.client, file_name, file_size)
+    contents = f.contents
+
     f = self.aws.open(file_name)
     self.assertEqual(f.mode, 'r')
     f.seek(0, os.SEEK_END)
     self.assertEqual(f.tell(), file_size)
     self.assertEqual(f.read(), b'')
     f.seek(0)
-    self.assertEqual(f.read(), b'phil\n')
+    self.assertEqual(f.read(), contents)
 
   def test_file_write(self):
     file_name = 's3://random-data-sets/_write_file'
@@ -300,7 +308,7 @@ class TestS3IO(unittest.TestCase):
       self.assertEqual(f.read(), contents)
 
   def test_list_prefix(self):
-    bucket_name = 's3-tests'
+    bucket_name = 'random-data-sets'
 
     objects = [
         ('jerry/pigpen/phil', 5),
@@ -310,20 +318,20 @@ class TestS3IO(unittest.TestCase):
 
     for (object_name, size) in objects:
       file_name = 's3://%s/%s' % (bucket_name, object_name)
-      self._insert_random_file(self.client, file_name, size)
+      self._insert_random_file(self.aws.client, file_name, size)
 
     test_cases = [
-        ('s3://s3-tests/j', [
+        ('s3://random-data-sets/j', [
             ('jerry/pigpen/phil', 5),
             ('jerry/pigpen/bobby', 3),
             ('jerry/billy/bobby', 4),
         ]),
-        ('s3://s3-tests/jerry/', [
+        ('s3://random-data-sets/jerry/', [
             ('jerry/pigpen/phil', 5),
             ('jerry/pigpen/bobby', 3),
             ('jerry/billy/bobby', 4),
         ]),
-        ('s3://s3-tests/jerry/pigpen/phil', [
+        ('s3://random-data-sets/jerry/pigpen/phil', [
             ('jerry/pigpen/phil', 5),
         ]),
     ]
