@@ -73,15 +73,19 @@ class TestS3IO(unittest.TestCase):
     bucket, name = s3io.parse_s3_path(path)
     contents = os.urandom(size)
     fakeFile = fake_client.FakeFile(bucket, name, contents)
-    # client.add_file(f)
     f = self.aws.open(path, 'w')
     f.write(contents)
     f.close()
     return fakeFile
 
   def setUp(self):
+    # For pure unit tests, use this Fake S3 Client
+    # It will mock all calls to aws and no authentication is needed
     self.client = fake_client.FakeS3Client()
     self.aws = s3io.S3IO(self.client)
+    # For integration tests or to test over to the wire
+    # Initalize with no client and it will default to using Boto3
+    # Uncomment the following line:
     # self.aws = s3io.S3IO()
 
   def test_delete(self):
@@ -92,8 +96,6 @@ class TestS3IO(unittest.TestCase):
     self.aws.delete(file_name)
 
     # Create the file and check that it was created
-    # with self.aws.open(file_name, 'w') as f:
-    #   f.write(contents)
     self._insert_random_file(self.aws.client, file_name, file_size)
     files = self.aws.list_prefix('s3://random-data-sets/')
     self.assertTrue(file_name in files)
@@ -135,7 +137,6 @@ class TestS3IO(unittest.TestCase):
     f.write(contents[1000:1024 * 1024])
     f.write(contents[1024 * 1024:])
     f.close()
-    bucket, name = s3io.parse_s3_path(file_name)
     new_f = self.aws.open(file_name, 'r')
     new_f_contents = new_f.read()
     self.assertEqual(
@@ -143,6 +144,7 @@ class TestS3IO(unittest.TestCase):
 
   # This takes a long time to run
   # but helpful if needed to debug the write buffer
+  # By default, parts of a multipart upload can't be bigger than 5GB
   #def test_big_file_write(self):
   #  KiB, MiB, GiB = 1024, 1024 * 1024, 1024 * 1024 * 1024
   #  file_name = 's3://random-data-sets/_write_file'
@@ -167,7 +169,6 @@ class TestS3IO(unittest.TestCase):
     with self.aws.open(file_name, 'w') as wf:
       wf.write(contents)
 
-    # random_file = self._insert_random_file(self.client, file_name, file_size)
     f = self.aws.open(file_name)
     random.seed(0)
 
@@ -188,7 +189,6 @@ class TestS3IO(unittest.TestCase):
     file_name = 's3://random-data-sets/_flush_file'
     file_size = 5 * 1024 * 1024 + 2000
     contents = os.urandom(file_size)
-    bucket, name = s3io.parse_s3_path(file_name)
     f = self.aws.open(file_name, 'w')
     self.assertEqual(f.mode, 'w')
     f.write(contents[0:1000])
@@ -197,7 +197,7 @@ class TestS3IO(unittest.TestCase):
     f.flush()
     f.flush()  # Should be a NOOP.
     f.write(contents[1024 * 1024:])
-    f.close()  # This should al`read`y call the equivalent of flush() in its body.
+    f.close() # This should al`read`y call the equivalent of flush() in its body
     new_f = self.aws.open(file_name, 'r')
     new_f_contents = new_f.read()
     self.assertEqual(
@@ -213,7 +213,6 @@ class TestS3IO(unittest.TestCase):
       lines.append(line)
 
     contents = b''.join(lines)
-    bucket, name = s3io.parse_s3_path(file_name)
 
     with self.aws.open(file_name, 'w') as wf:
       wf.write(contents)
@@ -243,7 +242,6 @@ class TestS3IO(unittest.TestCase):
     contents = b''.join(lines)
 
     file_size = len(contents)
-    bucket, name = s3io.parse_s3_path(file_name)
 
     with self.aws.open(file_name, 'wb') as wf:
       wf.write(contents)
@@ -303,7 +301,7 @@ class TestS3IO(unittest.TestCase):
     contents = os.urandom(file_size)
     with self.aws.open(file_name, 'w') as f:
       f.write(contents)
-    bucket, name = s3io.parse_s3_path(file_name)
+
     with self.aws.open(file_name, 'r') as f:
       self.assertEqual(f.read(), contents)
 
