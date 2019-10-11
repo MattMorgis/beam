@@ -80,9 +80,9 @@ class TestS3IO(unittest.TestCase):
     return fakeFile
 
   def setUp(self):
-    # self.client = fake_client.FakeS3Client()
-    # self.aws = s3io.S3IO(self.client)
-    self.aws = s3io.S3IO()
+    self.client = fake_client.FakeS3Client()
+    self.aws = s3io.S3IO(self.client)
+    # self.aws = s3io.S3IO()
 
   def test_delete(self):
     file_name = 's3://random-data-sets/_delete_file'
