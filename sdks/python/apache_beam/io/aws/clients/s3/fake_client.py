@@ -123,13 +123,17 @@ class FakeS3Client(object):
     
     return file_.contents[start:end]
 
-  def delete(self, delete_request):
-    if self.get_file(delete_request.bucket, delete_request.object):
-      self.delete_file(delete_request.bucket, delete_request.object)
+  def delete(self, request):
+    if self.get_file(request.bucket, request.object):
+      self.delete_file(request.bucket, request.object)
     else:
       s3error = messages.S3ClientError()
       s3error.code, s3error.message = 404, 'The specified bucket does not exist'
       raise s3error
+
+  def delete_batch(self, request):
+    raise NotImplementedError
+
 
   def create_multipart_upload(self, request):
     # Create hash of bucket and key
