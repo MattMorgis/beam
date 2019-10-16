@@ -225,8 +225,13 @@ class Client(object):
         'Objects': [{'Key': object} for object in request.objects]
       }
     }
-
-    aws_response = self.client.delete_objects(**aws_request)
+    
+    try:
+      aws_response = self.client.delete_objects(**aws_request)
+    except Exception as e:
+      message = e.response['Error']['Message']
+      code = e.response['ResponseMetadata']['HTTPStatusCode']
+      raise messages.S3ClientError(message, code)
     
     deleted = [obj['Key'] for obj in aws_response.get('Deleted', [])]
 

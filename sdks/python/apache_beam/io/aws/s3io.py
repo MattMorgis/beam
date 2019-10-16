@@ -180,8 +180,7 @@ class S3IO(object):
         for key, error in zip(response.failed, response.errors):
           results[(bucket, key)] = error
 
-      except Exception as e:
-        # TODO: Check that this catches when it should, like an incorrect bucket
+      except messages.S3ClientError as e:
         for key in keys:
           results[(bucket, key)] = e
 
