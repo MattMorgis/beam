@@ -88,6 +88,28 @@ class TestS3IO(unittest.TestCase):
     # Uncomment the following line:
     self.aws = s3io.S3IO()
 
+  def test_copy(self):
+    src_file_name = 's3://random-data-sets/source'
+    dest_file_name = 's3://random-data-sets/dest'
+    file_size = 1024
+    self._insert_random_file(self.client, src_file_name, file_size)
+    self.assertTrue(
+        s3io.parse_s3_path(src_file_name) in self.client.objects.files)
+    self.assertFalse(
+        s3io.parse_s3_path(dest_file_name) in self.client.objects.files)
+
+    self.aws.copy(src_file_name, dest_file_name)
+
+    self.assertTrue(
+        s3io.parse_s3_path(src_file_name) in self.client.objects.files)
+    self.assertTrue(
+        s3io.parse_s3_path(dest_file_name) in self.client.objects.files)
+
+    # Test copy of non-existent files.
+    with self.assertRaisesRegex(S3ClientError, r'Not Found'):
+      self.aws.copy('s3://random-data-sets/non-existent',
+                    's3://random-data-sets/non-existent-destination')
+
   def test_delete(self):
     file_name = 's3://random-data-sets/_delete_file'
     file_size = 1024
@@ -148,7 +170,6 @@ class TestS3IO(unittest.TestCase):
     self.aws.delete(file_name)
 
     self.assertFalse(self.aws.exists(file_name))
-
 
   def test_file_mode(self):
     file_name = 's3://random-data-sets/jerry/pigpen/bobby'
