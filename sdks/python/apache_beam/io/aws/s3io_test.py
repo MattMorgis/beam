@@ -134,6 +134,23 @@ class TestS3IO(unittest.TestCase):
     for i in range(num_files):
       self.assertFalse(self.aws.exists(file_name_pattern % i))
 
+  def test_delete_batch_with_errors(self, *unused_args):
+    real_bucket = 'random-data-sets'
+    fake_bucket = 'fake-bucket-does-not-exist-as-far-as-i-know-54ef81de913a'
+    filenames = ['s3://' + bucket + '/_delete_batch/file' 
+      for bucket in (real_bucket, fake_bucket)]
+
+    result = self.aws.delete_batch(filenames)
+
+    # First is the file in the real bucket, which shouldn't throw an error
+    self.assertEqual(result[0][0], filenames[0])
+    self.assertIsNone(result[0][1])
+
+    # Second is the file in the fake bucket, which should throw a 404
+    self.assertEqual(result[1][0], filenames[1])
+    self.assertEqual(result[1][1].code, 404)
+
+
   def test_exists(self):
     file_name = 's3://random-data-sets/_exists'
     file_size = 1024

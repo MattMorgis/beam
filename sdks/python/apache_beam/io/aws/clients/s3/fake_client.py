@@ -130,7 +130,7 @@ class FakeS3Client(object):
 
   def delete(self, request):
     if request.bucket not in self.known_buckets:
-      raise messages.S3ClientError(404, 'The specified bucket does not exist')
+      raise messages.S3ClientError('The specified bucket does not exist', 404)
 
     if (request.bucket, request.object) in self.files:
       self.delete_file(request.bucket, request.object)
