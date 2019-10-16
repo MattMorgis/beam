@@ -134,6 +134,22 @@ class TestS3IO(unittest.TestCase):
     for i in range(num_files):
       self.assertFalse(self.aws.exists(file_name_pattern % i))
 
+  def test_exists(self):
+    file_name = 's3://random-data-sets/_exists'
+    file_size = 1024
+
+    self.assertFalse(self.aws.exists(file_name))
+
+    self._insert_random_file(self.aws.client, file_name, file_size)
+
+    self.assertTrue(self.aws.exists(file_name))
+
+    # Clean up
+    self.aws.delete(file_name)
+
+    self.assertFalse(self.aws.exists(file_name))
+
+
   def test_file_mode(self):
     file_name = 's3://random-data-sets/jerry/pigpen/bobby'
     with self.aws.open(file_name, 'w') as f:

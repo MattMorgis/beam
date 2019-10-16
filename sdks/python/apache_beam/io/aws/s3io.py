@@ -149,6 +149,20 @@ class S3IO(object):
       else:
         logging.error('HTTP error while deleting file %s: %s', path,
                       3)
+        raise e
+
+  def exists(self, path):
+    bucket, object = parse_s3_path(path)
+    request = messages.GetRequest(bucket, object)
+    try:
+      self.client.get_object_metadata(request)
+      return True
+    except messages.S3ClientError as e:
+      if e.code == 404:
+        # HTTP 404 indicates that the file did not exist
+        return False
+      else:
+        # We re-raise all other exceptions
         raise
 
 
