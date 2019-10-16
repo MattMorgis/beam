@@ -105,6 +105,51 @@ class TestS3IO(unittest.TestCase):
     files = self.aws.list_prefix('s3://random-data-sets/')
     self.assertTrue(file_name not in files)
 
+  def test_delete_batch(self, *unused_args):
+    file_name_pattern = 's3://random-data-sets/_delete_batch/%d'
+    file_size = 1024
+    num_files = 5
+
+    # Test deletion of non-existent files.
+    result = self.aws.delete_batch(
+        [file_name_pattern % i for i in range(num_files)])
+    self.assertTrue(result)
+    for i, (file_name, exception) in enumerate(result):
+      self.assertEqual(file_name, file_name_pattern % i)
+      self.assertEqual(exception, None)
+      self.assertFalse(self.aws.exists(file_name_pattern % i))
+
+    # Insert some files.
+    for i in range(num_files):
+      self._insert_random_file(self.client, file_name_pattern % i, file_size)
+
+    # Check files inserted properly.
+    for i in range(num_files):
+      self.assertTrue(self.aws.exists(file_name_pattern % i))
+
+    # Execute batch delete.
+    self.aws.delete_batch([file_name_pattern % i for i in range(num_files)])
+
+    # Check files deleted properly.
+    for i in range(num_files):
+      self.assertFalse(self.aws.exists(file_name_pattern % i))
+
+  def test_exists(self):
+    file_name = 's3://random-data-sets/_exists'
+    file_size = 1024
+
+    self.assertFalse(self.aws.exists(file_name))
+
+    self._insert_random_file(self.aws.client, file_name, file_size)
+
+    self.assertTrue(self.aws.exists(file_name))
+
+    # Clean up
+    self.aws.delete(file_name)
+
+    self.assertFalse(self.aws.exists(file_name))
+
+
   def test_file_mode(self):
     file_name = 's3://random-data-sets/jerry/pigpen/bobby'
     with self.aws.open(file_name, 'w') as f:

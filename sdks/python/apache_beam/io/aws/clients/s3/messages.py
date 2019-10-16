@@ -119,6 +119,24 @@ class DeleteRequest(object):
     self.bucket = bucket
     self.object = object
 
+class DeleteBatchRequest(object):
+  
+  def __init__(self, bucket, objects):
+    # `objects` is a list of strings corresponding to the keys to be deleted
+    # in the bucket
+    self.bucket = bucket
+    self.objects = objects
+
+class DeleteBatchResponse(object):
+  
+  def __init__(self, deleted, failed, errors):
+    # `deleted` is a list of strings corresponding to the keys that were deleted
+    # `failed` is a list of strings corresponding to the keys that caused errors
+    # `errors` is a list of S3ClientErrors, aligned with the order of `failed`
+    self.deleted = deleted
+    self.failed = failed
+    self.errors = errors
+
 class S3ClientError(Exception):
 
   def __init__(self, message = None, code = None):

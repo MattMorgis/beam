@@ -149,6 +149,59 @@ class S3IO(object):
       else:
         logging.error('HTTP error while deleting file %s: %s', path,
                       3)
+        raise e
+
+  def delete_batch(self, paths):
+    """Deletes the objects at the given GCS paths.
+
+    Args:
+      paths: List of GCS file path patterns in the form s3://<bucket>/<name>,
+             not to exceed MAX_BATCH_OPERATION_SIZE in length.
+
+    Returns: List of tuples of (path, exception) in the same order as the paths
+             argument, where exception is None if the operation succeeded or
+             the relevant exception if the operation failed.
+    """
+    # Sort paths into bucket: [keys]
+    buckets, keys = zip(*[parse_s3_path(path) for path in paths])
+    grouped_keys = {bucket: [] for bucket in buckets}
+    for bucket, key in zip(buckets, keys): grouped_keys[bucket].append(key)
+
+
+    results = {}
+    for bucket, keys in grouped_keys.items():
+      request = messages.DeleteBatchRequest(bucket, keys)
+      try: 
+        response = self.client.delete_batch(request)
+
+        for key in response.deleted:
+          results[(bucket, key)] = None
+
+        for key, error in zip(response.failed, response.errors):
+          results[(bucket, key)] = error
+
+      except Exception as e:
+        # TODO: Check that this catches when it should, like an incorrect bucket
+        for key in keys:
+          results[(bucket, key)] = e
+
+    # Organize final results
+    final_results = [(path, results[parse_s3_path(path)]) for path in paths]
+
+    return final_results
+
+  def exists(self, path):
+    bucket, object = parse_s3_path(path)
+    request = messages.GetRequest(bucket, object)
+    try:
+      self.client.get_object_metadata(request)
+      return True
+    except messages.S3ClientError as e:
+      if e.code == 404:
+        # HTTP 404 indicates that the file did not exist
+        return False
+      else:
+        # We re-raise all other exceptions
         raise
 
 

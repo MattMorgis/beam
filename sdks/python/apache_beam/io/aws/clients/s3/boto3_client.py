@@ -216,3 +216,25 @@ class Client(object):
       s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
       s3error.message = e.response['Error']['Message']
       raise s3error
+
+  def delete_batch(self, request):
+
+    aws_request = {
+      'Bucket': request.bucket,
+      'Delete': {
+        'Objects': [{'Key': object} for object in request.objects]
+      }
+    }
+
+    aws_response = self.client.delete_objects(**aws_request)
+    
+    deleted = [obj['Key'] for obj in aws_response.get('Deleted', [])]
+
+    failed = [obj['Key'] for obj in aws_response.get('Errors', [])]
+
+    errors = [messages.S3ClientError(obj['Message'], obj['Code']) 
+              for obj in aws_response.get('Errors', [])]
+
+    return messages.DeleteBatchResponse(deleted, failed, errors)
+
+    
