@@ -192,9 +192,3 @@ class ClientErrorTest(unittest.TestCase):
     except Exception as e:
       self.assertIsInstance(e, messages.S3ClientError)
       self.assertEqual(e.code, 400)
-
-
-  def test_delete_batch(self):
-
-    # Add files to 
-    return
