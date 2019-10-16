@@ -249,7 +249,6 @@ class Client(object):
           'Key': request.src_key
       }
       self.client.copy(copy_src, request.dest_bucket, request.dest_key)
-      return
     except Exception as e:
       s3error = messages.S3ClientError(e.response['Error']['Message'])
       s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])

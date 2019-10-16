@@ -151,17 +151,6 @@ class S3IO(object):
     dest_bucket, dest_key = parse_s3_path(dest)
     request = messages.CopyRequest(src_bucket, src_key, dest_bucket, dest_key)
     self.client.copy(request)
-    return
-    # while not response.done:
-    #   logging.debug(
-    #       'Rewrite progress: %d of %d bytes, %s to %s',
-    #       response.totalBytesRewritten, response.objectSize, src, dest)
-    #   request.rewriteToken = response.rewriteToken
-    #   response = self.client.objects.Rewrite(request)
-    #   if self._rewrite_cb is not None:
-    #     self._rewrite_cb(response)
-
-    # logging.debug('Rewrite done: %s to %s', src, dest)
 
   @retry.with_exponential_backoff(
       retry_filter=retry.retry_on_server_errors_and_timeout_filter)
