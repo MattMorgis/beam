@@ -23,6 +23,7 @@ import random
 import unittest
 
 from apache_beam.io.aws.clients.s3 import fake_client
+from apache_beam.io.aws.clients.s3 import messages
 
 # Protect against environments where boto3 library is not available.
 # pylint: disable=wrong-import-order, wrong-import-position
@@ -93,20 +94,26 @@ class TestS3IO(unittest.TestCase):
     dest_file_name = 's3://random-data-sets/dest'
     file_size = 1024
     self._insert_random_file(self.client, src_file_name, file_size)
-    self.assertTrue(
-        s3io.parse_s3_path(src_file_name) in self.client.objects.files)
-    self.assertFalse(
-        s3io.parse_s3_path(dest_file_name) in self.client.objects.files)
+
+    self.assertTrue(src_file_name in
+                    self.aws.list_prefix('s3://random-data-sets/'))
+    # self.assertFalse(dest_file_name in
+    #                  self.aws.list_prefix('s3://random-data-sets/'))
 
     self.aws.copy(src_file_name, dest_file_name)
 
-    self.assertTrue(
-        s3io.parse_s3_path(src_file_name) in self.client.objects.files)
-    self.assertTrue(
-        s3io.parse_s3_path(dest_file_name) in self.client.objects.files)
+    self.assertTrue(src_file_name in
+                    self.aws.list_prefix('s3://random-data-sets/'))
+    self.assertTrue(dest_file_name in
+                    self.aws.list_prefix('s3://random-data-sets/'))
+
+    # Clean up
+    self.aws.delete_batch([
+        's3://random-data-sets/source',
+        's3://random-data-sets/dest'])
 
     # Test copy of non-existent files.
-    with self.assertRaisesRegex(S3ClientError, r'Not Found'):
+    with self.assertRaisesRegex(messages.S3ClientError, r'Not Found'):
       self.aws.copy('s3://random-data-sets/non-existent',
                     's3://random-data-sets/non-existent-destination')
 
@@ -171,7 +178,6 @@ class TestS3IO(unittest.TestCase):
     # Second is the file in the fake bucket, which should throw a 404
     self.assertEqual(result[1][0], filenames[1])
     self.assertEqual(result[1][1].code, 404)
-
 
   def test_exists(self):
     file_name = 's3://random-data-sets/_exists'

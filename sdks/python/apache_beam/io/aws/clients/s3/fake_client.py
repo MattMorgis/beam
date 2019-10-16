@@ -139,7 +139,6 @@ class FakeS3Client(object):
       # an extant bucket
       return 
       
-
   def delete_batch(self, request):
 
     deleted, failed, errors = [], [], []
@@ -153,6 +152,14 @@ class FakeS3Client(object):
         errors.append(e)
 
     return messages.DeleteBatchResponse(deleted, failed, errors)
+
+  def copy(self, request):
+
+    src_file = self.get_file(request.src_bucket, request.src_key)
+    dest_file = FakeFile(request.dest_bucket,
+                         request.dest_key,
+                         src_file.contents)
+    self.add_file(dest_file)
 
   def create_multipart_upload(self, request):
     # Create hash of bucket and key
