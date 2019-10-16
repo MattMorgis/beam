@@ -15,8 +15,8 @@ except ImportError:
 class ClientErrorTest(unittest.TestCase):
 
   def setUp(self):
-    self.client = fake_client.FakeS3Client()
-    # self.client = boto3_client.Client()
+    # self.client = fake_client.FakeS3Client()
+    self.client = boto3_client.Client()
     self.aws = s3io.S3IO(self.client)
   
   def test_get_object_metadata(self):
@@ -192,3 +192,9 @@ class ClientErrorTest(unittest.TestCase):
     except Exception as e:
       self.assertIsInstance(e, messages.S3ClientError)
       self.assertEqual(e.code, 400)
+
+
+  def test_delete_batch(self):
+
+    # Add files to 
+    return
