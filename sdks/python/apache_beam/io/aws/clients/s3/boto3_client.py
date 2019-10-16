@@ -220,19 +220,19 @@ class Client(object):
   def delete_batch(self, request):
 
     aws_request = {
-      'Bucket': request.bucket,
-      'Delete': {
-        'Objects': [{'Key': object} for object in request.objects]
-      }
+        'Bucket': request.bucket,
+        'Delete': {
+            'Objects': [{'Key': object} for object in request.objects]
+        }
     }
-    
+
     try:
       aws_response = self.client.delete_objects(**aws_request)
     except Exception as e:
       message = e.response['Error']['Message']
-      code = e.response['ResponseMetadata']['HTTPStatusCode']
+      code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
       raise messages.S3ClientError(message, code)
-    
+
     deleted = [obj['Key'] for obj in aws_response.get('Deleted', [])]
 
     failed = [obj['Key'] for obj in aws_response.get('Errors', [])]
@@ -242,4 +242,15 @@ class Client(object):
 
     return messages.DeleteBatchResponse(deleted, failed, errors)
 
-    
+  def copy(self, request):
+    try:
+      copy_src = {
+          'Bucket': request.src_bucket,
+          'Key': request.src_key
+      }
+      self.client.copy(copy_src, request.dest_bucket, request.dest_key)
+    except Exception as e:
+      s3error = messages.S3ClientError(e.response['Error']['Message'])
+      s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
+      s3error.message = e.response['Error']['Message']
+      raise s3error
