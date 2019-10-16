@@ -18,7 +18,7 @@
 from __future__ import absolute_import
 
 
-class GetRequest(object):
+class GetRequest():
   """
   S3 request object for `Get` command
   """
@@ -28,7 +28,7 @@ class GetRequest(object):
     self.object = object
 
 
-class UploadResponse(object):
+class UploadResponse():
   """
   S3 response object for `StartUpload` command
   """
@@ -37,7 +37,7 @@ class UploadResponse(object):
     self.upload_id = upload_id
 
 
-class UploadRequest(object):
+class UploadRequest():
   """
   S3 request object for `StartUpload` command
   """
@@ -48,7 +48,7 @@ class UploadRequest(object):
     self.mime_type = mime_type
 
 
-class UploadPartRequest(object):
+class UploadPartRequest():
   """
   S3 request object for `UploadPart` command
   """
@@ -62,7 +62,7 @@ class UploadPartRequest(object):
     # self.mime_type = mime_type
 
 
-class UploadPartResponse(object):
+class UploadPartResponse():
   """
   S3 response object for `UploadPart` command
   """
@@ -72,13 +72,14 @@ class UploadPartResponse(object):
     self.part_number = part_number
 
 
-class CompleteMultipartUploadRequest(object):
+class CompleteMultipartUploadRequest():
   """
   S3 request object for `UploadPart` command
   """
 
   def __init__(self, bucket, object, upload_id, parts):
-    # parts is a list of objects of the form {'ETag': response.etag, 'PartNumber': response.part_number}
+    # parts is a list of objects of the form
+    # {'ETag': response.etag, 'PartNumber': response.part_number}
     self.bucket = bucket
     self.object = object
     self.upload_id = upload_id
@@ -86,7 +87,7 @@ class CompleteMultipartUploadRequest(object):
     # self.mime_type = mime_type
 
 
-class ListRequest(object):
+class ListRequest():
   """
   S3 request object for `List` command
   """
@@ -97,7 +98,7 @@ class ListRequest(object):
     self.continuation_token = continuation_token
 
 
-class ListResponse(object):
+class ListResponse():
   """
   S3 response object for `List` command
   """
@@ -107,7 +108,7 @@ class ListResponse(object):
     self.next_token = next_token
 
 
-class Item(object):
+class Item():
   """
   An item in S3
   """
@@ -119,7 +120,7 @@ class Item(object):
     self.size = size
 
 
-class DeleteRequest(object):
+class DeleteRequest():
   """
   S3 request object for `Delete` command
   """
@@ -129,8 +130,8 @@ class DeleteRequest(object):
     self.object = object
 
 
-class DeleteBatchRequest(object):
-  
+class DeleteBatchRequest():
+
   def __init__(self, bucket, objects):
     # `objects` is a list of strings corresponding to the keys to be deleted
     # in the bucket
@@ -138,7 +139,7 @@ class DeleteBatchRequest(object):
     self.objects = objects
 
 
-class DeleteBatchResponse(object):
+class DeleteBatchResponse():
 
   def __init__(self, deleted, failed, errors):
     # `deleted` is a list of strings corresponding to the keys that were deleted
@@ -149,7 +150,7 @@ class DeleteBatchResponse(object):
     self.errors = errors
 
 
-class CopyRequest(object):
+class CopyRequest():
 
   def __init__(self, src_bucket, src_key, dest_bucket, dest_key):
     self.src_bucket = src_bucket
