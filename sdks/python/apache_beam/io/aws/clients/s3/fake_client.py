@@ -49,8 +49,13 @@ class FakeS3Client(object):
     self.list_continuation_tokens = {}
     self.multipart_uploads = {}
 
+    # TODO: import known buckets from where it's officially configured
+    self.known_buckets = {'random-data-sets'}
+
   def add_file(self, f):
     self.files[(f.bucket, f.key)] = f
+    if f.bucket not in self.known_buckets:
+      self.known_buckets.add(f.bucket)
 
   def get_file(self, bucket, obj):
     try:
@@ -124,16 +129,30 @@ class FakeS3Client(object):
     return file_.contents[start:end]
 
   def delete(self, request):
-    if self.get_file(request.bucket, request.object):
+    if request.bucket not in self.known_buckets:
+      raise messages.S3ClientError('The specified bucket does not exist', 404)
+
+    if (request.bucket, request.object) in self.files:
       self.delete_file(request.bucket, request.object)
     else:
-      s3error = messages.S3ClientError()
-      s3error.code, s3error.message = 404, 'The specified bucket does not exist'
-      raise s3error
+      # S3 doesn't raise an error if you try to delete a nonexistent file from
+      # an extant bucket
+      return 
+      
 
   def delete_batch(self, request):
-    raise NotImplementedError
 
+    deleted, failed, errors = [], [], []
+    for object in request.objects:
+      try:
+        delete_request = messages.DeleteRequest(request.bucket, object)
+        self.delete(delete_request)
+        deleted.append(object)
+      except messages.S3ClientError as e:
+        failed.append(object)
+        errors.append(e)
+
+    return messages.DeleteBatchResponse(deleted, failed, errors)
 
   def create_multipart_upload(self, request):
     # Create hash of bucket and key
@@ -186,4 +205,4 @@ class FakeS3Client(object):
     file_ = FakeFile(request.bucket, request.object, final_contents)
 
     # Store FakeFile in self.files
-    self.files[(request.bucket, request.object)] = file_
+    self.add_file(file_)

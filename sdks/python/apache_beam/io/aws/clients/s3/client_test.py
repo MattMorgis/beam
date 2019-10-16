@@ -15,8 +15,8 @@ except ImportError:
 class ClientErrorTest(unittest.TestCase):
 
   def setUp(self):
-    self.client = fake_client.FakeS3Client()
-    # self.client = boto3_client.Client()
+    # self.client = fake_client.FakeS3Client()
+    self.client = boto3_client.Client()
     self.aws = s3io.S3IO(self.client)
   
   def test_get_object_metadata(self):
