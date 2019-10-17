@@ -102,7 +102,6 @@ class TestS3IO(unittest.TestCase):
     etag = self.aws.checksum(file_name)
     self.assertEqual(expected_etag, etag)
 
-
   def test_copy(self):
     src_file_name = 's3://random-data-sets/source'
     dest_file_name = 's3://random-data-sets/dest'

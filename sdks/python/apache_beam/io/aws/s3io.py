@@ -137,6 +137,19 @@ class S3IO(object):
 
   @retry.with_exponential_backoff(
       retry_filter=retry.retry_on_server_errors_and_timeout_filter)
+  def checksum(self, path):
+    """Looks up the checksum of an S3 object.
+
+    Args:
+      path: S3 file path pattern in the form s3://<bucket>/<name>.
+    """
+    bucket, object_path = parse_s3_path(path)
+    request = messages.GetRequest(bucket, object_path)
+    item = self.client.get_object_metadata(request)
+    return item.etag
+
+  @retry.with_exponential_backoff(
+      retry_filter=retry.retry_on_server_errors_and_timeout_filter)
   def copy(self, src, dest):
     """Copies the given S3 object from src to dest.
 
