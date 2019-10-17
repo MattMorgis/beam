@@ -89,6 +89,22 @@ class ClientErrorTest(unittest.TestCase):
       self.assertIsInstance(e, messages.S3ClientError)
       self.assertEqual(e.code, 404)
 
+
+  def test_copy_nonexistent(self):
+
+    bucket = 'random-data-sets'
+    src_key = '_not_a_real_file_does_not_exist'
+    dest_key = '_destination_file_location'
+
+    request = messages.CopyRequest(bucket, src_key, bucket, dest_key)
+
+    with self.assertRaises(messages.S3ClientError) as e:
+      self.client.copy(request)
+
+    self.assertEqual(e.exception.code, 404)
+
+
+
   def test_upload_part_bad_number(self):
 
     bucket, object = 'random-data-sets', '_upload_part'
@@ -199,3 +215,4 @@ class ClientErrorTest(unittest.TestCase):
     except Exception as e:
       self.assertIsInstance(e, messages.S3ClientError)
       self.assertEqual(e.code, 400)
+
