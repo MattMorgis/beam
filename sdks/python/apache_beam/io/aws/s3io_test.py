@@ -17,6 +17,7 @@
 """Tests for S3 client."""
 from __future__ import absolute_import
 
+import hashlib
 import os
 import logging
 import random
@@ -87,7 +88,20 @@ class TestS3IO(unittest.TestCase):
     # For integration tests or to test over to the wire
     # Initalize with no client and it will default to using Boto3
     # Uncomment the following line:
-    # self.aws = s3io.S3IO()
+    self.aws = s3io.S3IO()
+
+  def test_checksum(self):
+
+    file_name = 's3://random-data-sets/_checksum'
+    file_size = 1024
+    file_ = self._insert_random_file(self.client, file_name, file_size)
+
+    md5_hexdigest = hashlib.md5(file_.contents).hexdigest()
+    expected_etag = '"' + str(md5_hexdigest) + '-1"'
+
+    etag = self.aws.checksum(file_name)
+    self.assertEqual(expected_etag, etag)
+
 
   def test_copy(self):
     src_file_name = 's3://random-data-sets/source'
