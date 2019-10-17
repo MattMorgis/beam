@@ -152,6 +152,31 @@ class S3IO(object):
     request = messages.CopyRequest(src_bucket, src_key, dest_bucket, dest_key)
     self.client.copy(request)
 
+  def copy_batch(self, src_dest_pairs):
+    """Copies the given GCS object from src to dest.
+
+    Args:
+      src_dest_pairs: list of (src, dest) tuples of s3://<bucket>/<name> files
+                      paths to copy from src to dest
+    Returns: List of tuples of (src, dest, exception) in the same order as the
+            src_dest_pairs argument, where exception is None if the operation
+            succeeded or the relevant exception if the operation failed.
+    """
+    results = []
+
+    for src_path, dest_path in src_dest_pairs:
+      src_bucket, src_key = parse_s3_path(src_path)
+      dest_bucket, dest_key = parse_s3_path(dest_path)
+      request = messages.CopyRequest(src_bucket, src_key, dest_bucket, dest_key)
+
+      try:
+        self.client.copy(request)
+        results.append((src_path, dest_path, None))
+      except messages.S3ClientError as e:
+        results.append((src_path, dest_path, e))
+
+    return results
+
   @retry.with_exponential_backoff(
       retry_filter=retry.retry_on_server_errors_and_timeout_filter)
   def delete(self, path):

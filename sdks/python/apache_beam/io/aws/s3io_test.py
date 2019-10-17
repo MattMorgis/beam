@@ -87,7 +87,7 @@ class TestS3IO(unittest.TestCase):
     # For integration tests or to test over to the wire
     # Initalize with no client and it will default to using Boto3
     # Uncomment the following line:
-    # self.aws = s3io.S3IO()
+    self.aws = s3io.S3IO()
 
   def test_copy(self):
     src_file_name = 's3://random-data-sets/source'
@@ -116,6 +116,50 @@ class TestS3IO(unittest.TestCase):
     with self.assertRaisesRegex(messages.S3ClientError, r'Not Found'):
       self.aws.copy('s3://random-data-sets/non-existent',
                     's3://random-data-sets/non-existent-destination')
+
+  def test_copy_batch(self):
+    from_name_pattern = 's3://random-data-sets/copy_me_%d'
+    to_name_pattern = 's3://random-data-sets/destination_%d'
+    file_size = 1024
+    num_files = 10
+
+    src_dest_pairs = [(from_name_pattern % i, to_name_pattern % i)
+                      for i in range(num_files)]
+
+    result = self.aws.copy_batch(src_dest_pairs)
+
+    self.assertTrue(result)
+    for i, (src, dest, exception) in enumerate(result):
+      self.assertEqual(src, from_name_pattern % i)
+      self.assertEqual(dest, to_name_pattern % i)
+      self.assertTrue(isinstance(exception, messages.S3ClientError))
+      self.assertEqual(exception.code, 404)
+      self.assertFalse(self.aws.exists(from_name_pattern % i))
+      self.assertFalse(self.aws.exists(to_name_pattern % i))
+
+    # Insert some files.
+    for i in range(num_files):
+      self._insert_random_file(self.client, from_name_pattern % i, file_size)
+
+    # Check files inserted properly.
+    for i in range(num_files):
+      self.assertTrue(self.aws.exists(from_name_pattern % i))
+
+    # Execute batch copy.
+    self.aws.copy_batch([(from_name_pattern % i, to_name_pattern % i)
+                         for i in range(num_files)])
+
+    # Check files copied properly.
+    for i in range(num_files):
+      self.assertTrue(self.aws.exists(from_name_pattern % i))
+      self.assertTrue(self.aws.exists(to_name_pattern % i))
+
+    # Clean up
+    all_files = set().union(*[set(pair) for pair in src_dest_pairs])
+    self.aws.delete_batch(all_files)
+
+
+
 
   def test_delete(self):
     file_name = 's3://random-data-sets/_delete_file'
