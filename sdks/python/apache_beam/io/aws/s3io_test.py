@@ -87,7 +87,7 @@ class TestS3IO(unittest.TestCase):
     # For integration tests or to test over to the wire
     # Initalize with no client and it will default to using Boto3
     # Uncomment the following line:
-    self.aws = s3io.S3IO()
+    # self.aws = s3io.S3IO()
 
   def test_copy(self):
     src_file_name = 's3://random-data-sets/source'
@@ -158,7 +158,6 @@ class TestS3IO(unittest.TestCase):
     all_files = set().union(*[set(pair) for pair in src_dest_pairs])
     self.aws.delete_batch(all_files)
 
-
   def test_copytree(self):
     src_dir_name = 's3://random-data-sets/source/'
     dest_dir_name = 's3://random-data-sets/dest/'
@@ -188,6 +187,28 @@ class TestS3IO(unittest.TestCase):
       src_file_name = src_dir_name + path
       dest_file_name = dest_dir_name + path
       self.aws.delete_batch([src_file_name, dest_file_name])
+
+  def test_rename(self):
+    src_file_name = 's3://random-data-sets/source'
+    dest_file_name = 's3://random-data-sets/dest'
+    file_size = 1024
+
+    self._insert_random_file(self.client, src_file_name, file_size)
+
+    self.assertTrue(
+        src_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+    self.assertFalse(
+        dest_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+
+    self.aws.rename(src_file_name, dest_file_name)
+
+    self.assertFalse(
+        src_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+    self.assertTrue(
+        dest_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+    
+    # Clean up
+    self.aws.delete_batch([src_file_name, dest_file_name])
 
   def test_delete(self):
     file_name = 's3://random-data-sets/_delete_file'

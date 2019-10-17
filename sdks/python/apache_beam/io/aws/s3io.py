@@ -246,6 +246,19 @@ class S3IO(object):
 
     return final_results
 
+  # We intentionally do not decorate this method with a retry, since the
+  # underlying copy and delete operations are already idempotent operations
+  # protected by retry decorators.
+  def rename(self, src, dest):
+    """Renames the given S3 object from src to dest.
+
+    Args:
+      src: S3 file path pattern in the form s3://<bucket>/<name>.
+      dest: S3 file path pattern in the form s3://<bucket>/<name>.
+    """
+    self.copy(src, dest)
+    self.delete(src)
+
   def exists(self, path):
     bucket, object = parse_s3_path(path)
     request = messages.GetRequest(bucket, object)
