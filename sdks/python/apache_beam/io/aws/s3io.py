@@ -153,7 +153,7 @@ class S3IO(object):
     self.client.copy(request)
 
   def copy_batch(self, src_dest_pairs):
-    """Copies the given GCS object from src to dest.
+    """Copies the given S3 object from src to dest.
 
     Args:
       src_dest_pairs: list of (src, dest) tuples of s3://<bucket>/<name> files
@@ -176,7 +176,7 @@ class S3IO(object):
         results.append((src_path, dest_path, e))
 
     return results
-    
+
   # We intentionally do not decorate this method with a retry, since the
   # underlying copy and delete operations are already idempotent operations
   # protected by retry decorators.
