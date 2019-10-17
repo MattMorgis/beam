@@ -18,9 +18,9 @@ class ClientErrorTest(unittest.TestCase):
     # self.client = fake_client.FakeS3Client()
     self.client = boto3_client.Client()
     self.aws = s3io.S3IO(self.client)
-  
+
   def test_get_object_metadata(self):
-    
+
     # Test nonexistent bucket/object
     bucket, object = 'random-data-sets', '_nonexistent_file_doesnt_exist'
     request = messages.GetRequest(bucket, object)
@@ -33,7 +33,7 @@ class ClientErrorTest(unittest.TestCase):
     except Exception as e:
       self.assertIsInstance(e, messages.S3ClientError)
       self.assertEqual(e.code, 404)
-  
+
   def test_get_range_nonexistent(self):
 
     # Test nonexistent bucket/object
@@ -56,15 +56,16 @@ class ClientErrorTest(unittest.TestCase):
 
     with self.aws.open(file_name, 'w') as f:
       f.write(contents)
-    
     bucket, object = s3io.parse_s3_path(file_name)
 
-    response = self.client.get_range(messages.GetRequest(bucket, object), -10, 20)
+    response = self.client.get_range(messages.GetRequest(bucket, object),
+                                     -10, 20)
     self.assertEqual(response, contents)
 
-    response = self.client.get_range(messages.GetRequest(bucket, object), 20, 10)
+    response = self.client.get_range(messages.GetRequest(bucket, object),
+                                     20, 10)
     self.assertEqual(response, contents)
-    
+
   def test_upload_part_nonexistent_upload_id(self):
 
     bucket, object = 'random-data-sets', '_upload_part'
@@ -83,10 +84,26 @@ class ClientErrorTest(unittest.TestCase):
                       request)
 
     try:
-      response = self.client.upload_part(request)
+      self.client.upload_part(request)
     except Exception as e:
       self.assertIsInstance(e, messages.S3ClientError)
       self.assertEqual(e.code, 404)
+
+
+  def test_copy_nonexistent(self):
+
+    bucket = 'random-data-sets'
+    src_key = '_not_a_real_file_does_not_exist'
+    dest_key = '_destination_file_location'
+
+    request = messages.CopyRequest(bucket, src_key, bucket, dest_key)
+
+    with self.assertRaises(messages.S3ClientError) as e:
+      self.client.copy(request)
+
+    self.assertEqual(e.exception.code, 404)
+
+
 
   def test_upload_part_bad_number(self):
 
@@ -123,31 +140,34 @@ class ClientErrorTest(unittest.TestCase):
 
     part_number = 1
     contents_1 = os.urandom(1024)
-    request_1 = messages.UploadPartRequest(bucket, 
-                                         object, 
-                                         upload_id, 
-                                         part_number, 
-                                         contents_1)
+    request_1 = messages.UploadPartRequest(bucket,
+                                           object,
+                                           upload_id,
+                                           part_number,
+                                           contents_1)
     response_1 = self.client.upload_part(request_1)
 
 
     part_number = 2
     contents_2 = os.urandom(1024)
-    request_2 = messages.UploadPartRequest(bucket, 
-                                         object, 
-                                         upload_id, 
-                                         part_number, 
-                                         contents_2)
+    request_2 = messages.UploadPartRequest(bucket,
+                                           object,
+                                           upload_id,
+                                           part_number,
+                                           contents_2)
     response_2 = self.client.upload_part(request_2)
 
     parts = [
-      {'PartNumber': 1, 'ETag': response_1.etag},
-      {'PartNumber': 2, 'ETag': response_2.etag}
+        {'PartNumber': 1, 'ETag': response_1.etag},
+        {'PartNumber': 2, 'ETag': response_2.etag}
     ]
-    complete_request = messages.CompleteMultipartUploadRequest(bucket, object, upload_id, parts)
+    complete_request = messages.CompleteMultipartUploadRequest(bucket, 
+                                                               object, 
+                                                               upload_id, 
+                                                               parts)
 
     try:
-      response = self.client.complete_multipart_upload(complete_request)
+      self.client.complete_multipart_upload(complete_request)
     except Exception as e:
       self.assertIsInstance(e, messages.S3ClientError)
       self.assertEqual(e.code, 400)
@@ -163,32 +183,36 @@ class ClientErrorTest(unittest.TestCase):
 
     part_number = 1
     contents_1 = os.urandom(5 * 1024)
-    request_1 = messages.UploadPartRequest(bucket, 
-                                         object, 
-                                         upload_id, 
-                                         part_number, 
-                                         contents_1)
+    request_1 = messages.UploadPartRequest(bucket,
+                                           object,
+                                           upload_id,
+                                           part_number,
+                                           contents_1)
     response_1 = self.client.upload_part(request_1)
 
 
     part_number = 2
     contents_2 = os.urandom(1024)
-    request_2 = messages.UploadPartRequest(bucket, 
-                                         object, 
-                                         upload_id, 
-                                         part_number, 
-                                         contents_2)
+    request_2 = messages.UploadPartRequest(bucket,
+                                           object,
+                                           upload_id,
+                                           part_number,
+                                           contents_2)
     response_2 = self.client.upload_part(request_2)
 
     parts = [
-      {'PartNumber': 1, 'ETag': response_1.etag},
-      {'PartNumber': 2, 'ETag': response_2.etag},
-      {'PartNumber': 3, 'ETag': 'fake-etag'},
+        {'PartNumber': 1, 'ETag': response_1.etag},
+        {'PartNumber': 2, 'ETag': response_2.etag},
+        {'PartNumber': 3, 'ETag': 'fake-etag'},
     ]
-    complete_request = messages.CompleteMultipartUploadRequest(bucket, object, upload_id, parts)
+    complete_request = messages.CompleteMultipartUploadRequest(bucket,
+                                                               object,
+                                                               upload_id,
+                                                               parts)
 
     try:
-      response = self.client.complete_multipart_upload(complete_request)
+      self.client.complete_multipart_upload(complete_request)
     except Exception as e:
       self.assertIsInstance(e, messages.S3ClientError)
       self.assertEqual(e.code, 400)
+
