@@ -176,6 +176,22 @@ class S3IO(object):
         results.append((src_path, dest_path, e))
 
     return results
+    
+  # We intentionally do not decorate this method with a retry, since the
+  # underlying copy and delete operations are already idempotent operations
+  # protected by retry decorators.
+  def copytree(self, src, dest):
+    """Renames the given S3 "directory" recursively from src to dest.
+
+    Args:
+      src: S3 file path pattern in the form s3://<bucket>/<name>/.
+      dest: S3 file path pattern in the form s3://<bucket>/<name>/.
+    """
+    assert src.endswith('/')
+    assert dest.endswith('/')
+    for entry in self.list_prefix(src):
+      rel_path = entry[len(src):]
+      self.copy(entry, dest + rel_path)
 
   @retry.with_exponential_backoff(
       retry_filter=retry.retry_on_server_errors_and_timeout_filter)
