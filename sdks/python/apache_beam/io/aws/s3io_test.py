@@ -97,8 +97,8 @@ class TestS3IO(unittest.TestCase):
 
     self.assertTrue(src_file_name in
                     self.aws.list_prefix('s3://random-data-sets/'))
-    # self.assertFalse(dest_file_name in
-    #                  self.aws.list_prefix('s3://random-data-sets/'))
+    self.assertFalse(dest_file_name in
+                     self.aws.list_prefix('s3://random-data-sets/'))
 
     self.aws.copy(src_file_name, dest_file_name)
 
@@ -116,6 +116,36 @@ class TestS3IO(unittest.TestCase):
     with self.assertRaisesRegex(messages.S3ClientError, r'Not Found'):
       self.aws.copy('s3://random-data-sets/non-existent',
                     's3://random-data-sets/non-existent-destination')
+
+  def test_copytree(self):
+    src_dir_name = 's3://random-data-sets/source/'
+    dest_dir_name = 's3://random-data-sets/dest/'
+    file_size = 1024
+    paths = ['a', 'b/c', 'b/d']
+    for path in paths:
+      src_file_name = src_dir_name + path
+      dest_file_name = dest_dir_name + path
+      self._insert_random_file(self.client, src_file_name, file_size)
+      self.assertTrue(
+          src_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+      self.assertFalse(
+          dest_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+
+    self.aws.copytree(src_dir_name, dest_dir_name)
+
+    for path in paths:
+      src_file_name = src_dir_name + path
+      dest_file_name = dest_dir_name + path
+      self.assertTrue(
+          src_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+      self.assertTrue(
+          dest_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+
+    # Clean up
+    for path in paths:
+      src_file_name = src_dir_name + path
+      dest_file_name = dest_dir_name + path
+      self.aws.delete_batch([src_file_name, dest_file_name])
 
   def test_delete(self):
     file_name = 's3://random-data-sets/_delete_file'
@@ -166,8 +196,8 @@ class TestS3IO(unittest.TestCase):
   def test_delete_batch_with_errors(self, *unused_args):
     real_bucket = 'random-data-sets'
     fake_bucket = 'fake-bucket-does-not-exist-as-far-as-i-know-54ef81de913a'
-    filenames = ['s3://' + bucket + '/_delete_batch/file' 
-      for bucket in (real_bucket, fake_bucket)]
+    filenames = ['s3://' + bucket + '/_delete_batch/file'
+                 for bucket in (real_bucket, fake_bucket)]
 
     result = self.aws.delete_batch(filenames)
 
