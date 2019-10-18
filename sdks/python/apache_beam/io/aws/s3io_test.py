@@ -93,14 +93,19 @@ class TestS3IO(unittest.TestCase):
   def test_checksum(self):
 
     file_name = 's3://random-data-sets/_checksum'
-    file_size = 1024
-    file_ = self._insert_random_file(self.client, file_name, file_size)
+    contents = b'file contents'
 
-    md5_hexdigest = hashlib.md5(file_.contents).hexdigest()
-    expected_etag = '"' + str(md5_hexdigest) + '-1"'
+    with self.aws.open(file_name, 'w') as f:
+      f.write(contents)
+
+    md5_hexdigest = hashlib.md5(contents).digest()
+    expected_etag = '"28a496523ba9169a8460648a6cc4eb5f-1"'
 
     etag = self.aws.checksum(file_name)
     self.assertEqual(expected_etag, etag)
+
+    # Clean up
+    self.aws.delete(file_name)
 
   def test_copy(self):
     src_file_name = 's3://random-data-sets/source'
