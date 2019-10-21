@@ -282,6 +282,7 @@ class TestS3IO(unittest.TestCase):
     # Create the file in the real bucket
     self._insert_random_file(self.client, real_prefix % 'src', 1024)
 
+    # Execute batch rename
     result = self.aws.rename_batch(src_dest_pairs)
 
     # First is the file in the real bucket, which shouldn't throw an error

@@ -316,8 +316,6 @@ class S3IO(object):
     """
     if not src_dest_pairs: return []
 
-    rename_results = []
-
     copy_results = self.copy_batch(src_dest_pairs)
     paths_to_delete = [src for (src, _, err) in copy_results if err is None]
     delete_results = self.delete_batch(paths_to_delete)
