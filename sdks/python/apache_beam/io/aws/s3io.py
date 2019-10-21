@@ -223,11 +223,10 @@ class S3IO(object):
         raise e
 
   def delete_batch(self, paths):
-    """Deletes the objects at the given GCS paths.
+    """Deletes the objects at the given S3 paths.
 
     Args:
-      paths: List of GCS file path patterns in the form s3://<bucket>/<name>,
-             not to exceed MAX_BATCH_OPERATION_SIZE in length.
+      paths: List of S3 file paths in the form s3://<bucket>/<name>
 
     Returns: List of tuples of (path, exception) in the same order as the paths
              argument, where exception is None if the operation succeeded or
@@ -258,6 +257,19 @@ class S3IO(object):
     final_results = [(path, results[parse_s3_path(path)]) for path in paths]
 
     return final_results
+
+  def delete_tree(self, path):
+    """Deletes all objects under the given S3 prefix.
+
+    Args:
+      path: S3 path in the form s3://<bucket>/<name>/ (ending with a "/")
+
+    Returns: List of tuples of (path, exception), where each path is an object
+            under the given path. exception is None if the operation succeeded
+            or the relevant exception if the operation failed.
+    """
+    raise NotImplementedError
+
 
   # We intentionally do not decorate this method with a retry, since the
   # underlying copy and delete operations are already idempotent operations
