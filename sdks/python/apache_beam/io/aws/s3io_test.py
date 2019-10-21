@@ -88,7 +88,7 @@ class TestS3IO(unittest.TestCase):
     # For integration tests or to test over to the wire
     # Initalize with no client and it will default to using Boto3
     # Uncomment the following line:
-    # self.aws = s3io.S3IO()
+    self.aws = s3io.S3IO()
 
   def test_checksum(self):
 
@@ -272,6 +272,30 @@ class TestS3IO(unittest.TestCase):
     # Clean up
     all_files = set().union(*[set(pair) for pair in src_dest_pairs])
     self.aws.delete_batch(all_files)
+
+  def test_rename_batch_with_errors(self):
+    real_prefix = 's3://random-data-sets/_rename_batch/%s'
+    fake_prefix = 's3://fake-bucket-68ae4b0ef7b9/_rename_batch/%s'
+    src_dest_pairs = [(prefix % 'src', prefix % 'dest')
+                      for prefix in (real_prefix, fake_prefix)]
+
+    # Create the file in the real bucket
+    self._insert_random_file(self.client, real_prefix % 'src', 1024)
+
+    result = self.aws.rename_batch(src_dest_pairs)
+
+    # First is the file in the real bucket, which shouldn't throw an error
+    self.assertEqual(result[0][0], src_dest_pairs[0][0])
+    self.assertEqual(result[0][1], src_dest_pairs[0][1])
+    self.assertIsNone(result[0][2])
+
+    # Second is the file in the fake bucket, which should throw a 404
+    self.assertEqual(result[1][0], src_dest_pairs[1][0])
+    self.assertEqual(result[1][1], src_dest_pairs[1][1])
+    self.assertEqual(result[1][2].code, 404)
+
+    # Clean up
+    self.aws.delete(real_prefix % 'dest')
 
   def test_delete(self):
     file_name = 's3://random-data-sets/_delete_file'
