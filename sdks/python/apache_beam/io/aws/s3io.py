@@ -166,15 +166,17 @@ class S3IO(object):
     self.client.copy(request)
 
   def copy_batch(self, src_dest_pairs):
-    """Copies the given S3 object from src to dest.
+    """Copies the given S3 objects from src to dest.
 
     Args:
-      src_dest_pairs: list of (src, dest) tuples of s3://<bucket>/<name> files
+      src_dest_pairs: list of (src, dest) tuples of s3://<bucket>/<name> file
                       paths to copy from src to dest
     Returns: List of tuples of (src, dest, exception) in the same order as the
             src_dest_pairs argument, where exception is None if the operation
             succeeded or the relevant exception if the operation failed.
     """
+    if not src_dest_pairs: return []
+
     results = []
 
     for src_path, dest_path in src_dest_pairs:
@@ -232,6 +234,8 @@ class S3IO(object):
              argument, where exception is None if the operation succeeded or
              the relevant exception if the operation failed.
     """
+    if not paths: return []
+
     # Sort paths into bucket: [keys]
     buckets, keys = zip(*[parse_s3_path(path) for path in paths])
     grouped_keys = {bucket: [] for bucket in buckets}
@@ -273,7 +277,6 @@ class S3IO(object):
     paths = self.list_prefix(root)
     return self.delete_batch(paths)
 
-
   # We intentionally do not decorate this method with a retry, since the
   # underlying copy and delete operations are already idempotent operations
   # protected by retry decorators.
@@ -300,6 +303,34 @@ class S3IO(object):
       else:
         # We re-raise all other exceptions
         raise
+
+  def rename_batch(self, src_dest_pairs):
+    """Renames the given S3 objects from src to dest.
+
+    Args:
+      src_dest_pairs: list of (src, dest) tuples of s3://<bucket>/<name> file
+                      paths to rename from src to dest
+    Returns: List of tuples of (src, dest, exception) in the same order as the
+            src_dest_pairs argument, where exception is None if the operation
+            succeeded or the relevant exception if the operation failed.
+    """
+    if not src_dest_pairs: return []
+
+    rename_results = []
+
+    copy_results = self.copy_batch(src_dest_pairs)
+    paths_to_delete = [src for (src, _, err) in copy_results if err is None]
+    delete_results = self.delete_batch(paths_to_delete)
+
+    delete_results_dict = {src: err for (src, err) in delete_results}
+    rename_results = []
+    for src, dest, err in copy_results:
+      if err is not None: rename_results.append((src, dest, err))
+      elif delete_results_dict[src] is not None: 
+        rename_results.append(src, dest, delete_results_dict[src])
+      else: rename_results.append((src, dest, None))
+
+    return rename_results
 
 
 class S3Downloader(Downloader):
