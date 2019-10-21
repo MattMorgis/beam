@@ -258,17 +258,20 @@ class S3IO(object):
 
     return final_results
 
-  def delete_tree(self, path):
-    """Deletes all objects under the given S3 prefix.
+  def delete_tree(self, root):
+    """Deletes all objects under the given S3 root path.
 
     Args:
-      path: S3 path in the form s3://<bucket>/<name>/ (ending with a "/")
+      path: S3 root path in the form s3://<bucket>/<name>/ (ending with a "/")
 
     Returns: List of tuples of (path, exception), where each path is an object
-            under the given path. exception is None if the operation succeeded
+            under the given root. exception is None if the operation succeeded
             or the relevant exception if the operation failed.
     """
-    raise NotImplementedError
+    assert root.endswith('/')
+
+    paths = self.list_prefix(root)
+    return self.delete_batch(paths)
 
 
   # We intentionally do not decorate this method with a retry, since the

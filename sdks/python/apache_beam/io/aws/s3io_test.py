@@ -297,7 +297,7 @@ class TestS3IO(unittest.TestCase):
 
   def test_delete_tree(self):
 
-    root_path = 's3://random_data_sets/_delete_tree/'
+    root_path = 's3://random-data-sets/_delete_tree/'
     leaf_paths = ['a', 'b/c', 'b/d', 'b/d/e']
     paths = [root_path + leaf for leaf in leaf_paths]
 
