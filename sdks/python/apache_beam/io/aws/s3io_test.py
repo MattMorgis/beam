@@ -71,6 +71,7 @@ class TestS3PathParser(unittest.TestCase):
 
 class TestS3IO(unittest.TestCase):
 
+
   def _insert_random_file(self, client, path, size):
     bucket, name = s3io.parse_s3_path(path)
     contents = os.urandom(size)
@@ -90,14 +91,18 @@ class TestS3IO(unittest.TestCase):
     # Uncomment the following line:
     self.aws = s3io.S3IO()
 
+    # TODO: document this
+    self.TEST_DATA_PATH = 's3://random-data-sets/beam_tests/'
+
+
   def test_checksum(self):
 
-    file_name = 's3://random-data-sets/_checksum'
+    file_name = self.TEST_DATA_PATH + '_checksum'
     file_size = 1024
     file_ = self._insert_random_file(self.client, file_name, file_size)
 
     original_etag = self.aws.checksum(file_name)
-    
+
     self.aws.delete(file_name)
 
     with self.aws.open(file_name, 'w') as f:
@@ -113,32 +118,30 @@ class TestS3IO(unittest.TestCase):
     self.aws.delete(file_name)
 
   def test_copy(self):
-    src_file_name = 's3://random-data-sets/source'
-    dest_file_name = 's3://random-data-sets/dest'
+    src_file_name = self.TEST_DATA_PATH + 'source'
+    dest_file_name = self.TEST_DATA_PATH + 'dest'
     file_size = 1024
     self._insert_random_file(self.client, src_file_name, file_size)
 
     self.assertTrue(src_file_name in
-                    self.aws.list_prefix('s3://random-data-sets/'))
+                    self.aws.list_prefix(self.TEST_DATA_PATH))
     self.assertFalse(dest_file_name in
-                     self.aws.list_prefix('s3://random-data-sets/'))
+                     self.aws.list_prefix(self.TEST_DATA_PATH))
 
     self.aws.copy(src_file_name, dest_file_name)
 
     self.assertTrue(src_file_name in
-                    self.aws.list_prefix('s3://random-data-sets/'))
+                    self.aws.list_prefix(self.TEST_DATA_PATH))
     self.assertTrue(dest_file_name in
-                    self.aws.list_prefix('s3://random-data-sets/'))
+                    self.aws.list_prefix(self.TEST_DATA_PATH))
 
     # Clean up
-    self.aws.delete_batch([
-        's3://random-data-sets/source',
-        's3://random-data-sets/dest'])
+    self.aws.delete_batch([src_file_name, dest_file_name])
 
     # Test copy of non-existent files.
     with self.assertRaisesRegex(messages.S3ClientError, r'Not Found'):
-      self.aws.copy('s3://random-data-sets/non-existent',
-                    's3://random-data-sets/non-existent-destination')
+      self.aws.copy(self.TEST_DATA_PATH + 'non-existent',
+                    self.TEST_DATA_PATH + 'non-existent-destination')
 
   def test_copy_batch(self):
     from_name_pattern = 's3://random-data-sets/copy_me_%d'
