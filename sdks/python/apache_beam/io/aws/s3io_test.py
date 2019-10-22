@@ -295,6 +295,28 @@ class TestS3IO(unittest.TestCase):
     self.assertEqual(result[1][0], filenames[1])
     self.assertEqual(result[1][1].code, 404)
 
+  def test_delete_tree(self):
+
+    root_path = 's3://random-data-sets/_delete_tree/'
+    leaf_paths = ['a', 'b/c', 'b/d', 'b/d/e']
+    paths = [root_path + leaf for leaf in leaf_paths]
+
+    # Create file tree
+    file_size = 1024
+    for path in paths:
+      self._insert_random_file(self.client, path, file_size)
+
+    # Check that the files exist
+    for path in paths:
+      self.assertTrue(self.aws.exists(path))
+
+    # Delete the tree
+    self.aws.delete_tree(root_path)
+
+    # Check that the files have been deleted
+    for path in paths:
+      self.assertFalse(self.aws.exists(path))
+
   def test_exists(self):
     file_name = 's3://random-data-sets/_exists'
     file_size = 1024
