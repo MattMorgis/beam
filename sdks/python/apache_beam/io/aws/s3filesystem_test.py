@@ -75,8 +75,7 @@ class S3FileSystemTest(unittest.TestCase):
     with self.assertRaises(ValueError):
       self.fs.split('/no/s3/prefix')
 
-  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
-  def test_match_multiples(self, mock_s3io):
+  def test_match_multiples(self):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     s3filesystem.s3io.S3IO = lambda: s3io_mock
@@ -95,8 +94,7 @@ class S3FileSystemTest(unittest.TestCase):
         expected_results)
     s3io_mock.list_prefix.assert_called_once_with('s3://bucket/')
 
-  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
-  def test_match_multiples_limit(self, mock_s3io):
+  def test_match_multiples_limit(self):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     limit = 1
@@ -116,8 +114,7 @@ class S3FileSystemTest(unittest.TestCase):
         limit)
     s3io_mock.list_prefix.assert_called_once_with('s3://bucket/')
 
-  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
-  def test_match_multiples_error(self, mock_s3io):
+  def test_match_multiples_error(self):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     s3filesystem.s3io.S3IO = lambda: s3io_mock
@@ -131,8 +128,7 @@ class S3FileSystemTest(unittest.TestCase):
                            r's3://bucket/.*%s' % exception)
     s3io_mock.list_prefix.assert_called_once_with('s3://bucket/')
 
-  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
-  def test_match_multiple_patterns(self, mock_s3io):
+  def test_match_multiple_patterns(self):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     s3filesystem.s3io.S3IO = lambda: s3io_mock
