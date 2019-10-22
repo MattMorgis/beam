@@ -319,7 +319,7 @@ class TestS3IO(unittest.TestCase):
     self.assertTrue(file_name not in files)
 
   def test_delete_batch(self, *unused_args):
-    file_name_pattern = 's3://random-data-sets/_delete_batch/%d'
+    file_name_pattern = self.TEST_DATA_PATH + '/delete_batch/%d'
     file_size = 1024
     num_files = 5
 
@@ -348,10 +348,9 @@ class TestS3IO(unittest.TestCase):
       self.assertFalse(self.aws.exists(file_name_pattern % i))
 
   def test_delete_batch_with_errors(self, *unused_args):
-    real_bucket = 'random-data-sets'
-    fake_bucket = 'fake-bucket-does-not-exist-as-far-as-i-know-54ef81de913a'
-    filenames = ['s3://' + bucket + '/_delete_batch/file'
-                 for bucket in (real_bucket, fake_bucket)]
+    real_file = self.TEST_DATA_PATH + '/delete_batch/file'
+    fake_file = 's3://fake-bucket-68ae4b0ef7b9/delete_batch/file'
+    filenames = [real_file, fake_file]
 
     result = self.aws.delete_batch(filenames)
 
@@ -365,7 +364,7 @@ class TestS3IO(unittest.TestCase):
 
   def test_delete_tree(self):
 
-    root_path = 's3://random-data-sets/_delete_tree/'
+    root_path = self.TEST_DATA_PATH + 'delete_tree/'
     leaf_paths = ['a', 'b/c', 'b/d', 'b/d/e']
     paths = [root_path + leaf for leaf in leaf_paths]
 
