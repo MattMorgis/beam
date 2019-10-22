@@ -124,11 +124,11 @@ class S3FileSystemTest(unittest.TestCase):
     exception = IOError('Failed')
     s3io_mock.list_prefix.side_effect = exception
 
-    with self.assertRaisesRegexp(BeamIOError,
-                                 r'^Match operation failed') as error:
+    with self.assertRaisesRegex(BeamIOError,
+                                r'^Match operation failed') as error:
       self.fs.match(['s3://bucket/'])
-    self.assertRegexpMatches(str(error.exception.exception_details),
-                             r's3://bucket/.*%s' % exception)
+    self.assertRaisesRegex(str(error.exception.exception_details),
+                           r's3://bucket/.*%s' % exception)
     s3io_mock.list_prefix.assert_called_once_with('s3://bucket/')
 
   @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
