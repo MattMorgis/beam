@@ -24,12 +24,15 @@ from apache_beam.io.aws.clients.s3 import messages
 
 class FakeFile(object):
 
-  def __init__(self, bucket, key, contents, last_modified=None):
+  def __init__(self, bucket, key, contents, last_modified=None, etag=None):
     self.bucket = bucket
     self.key = key
     self.contents = contents
     self.last_modified = last_modified
-    self.etag = 'xxxxxxxx'
+    if not etag:
+      self.etag = '"%s-1"' % ('x' * 32)
+    else:
+      self.etag = etag
 
   def get_metadata(self):
     last_modified_datetime = None
@@ -180,7 +183,7 @@ class FakeS3Client(object):
 
     self.multipart_uploads[upload_id][part_number] = request.bytes
 
-    etag = 'xxxxx-fake-etag'
+    etag = '"%s"' % ('x' * 32)
     return messages.UploadPartResponse(etag, part_number)
 
   def complete_multipart_upload(self, request):
@@ -209,7 +212,9 @@ class FakeS3Client(object):
     final_contents = b''.join(sorted_bytes)
 
     # Create FakeFile object
-    file_ = FakeFile(request.bucket, request.object, final_contents)
+    num_parts = len(parts_received)
+    etag = '"%s-%d"' % ('x' * 32, num_parts)
+    file_ = FakeFile(request.bucket, request.object, final_contents, etag=etag)
 
     # Store FakeFile in self.files
     self.add_file(file_)
