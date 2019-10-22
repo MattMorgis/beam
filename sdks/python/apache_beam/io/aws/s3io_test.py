@@ -277,8 +277,8 @@ class TestS3IO(unittest.TestCase):
     self.aws.delete_batch(all_files)
 
   def test_rename_batch_with_errors(self):
-    real_prefix = 's3://random-data-sets/_rename_batch/%s'
-    fake_prefix = 's3://fake-bucket-68ae4b0ef7b9/_rename_batch/%s'
+    real_prefix = self.TEST_DATA_PATH + '_rename_batch_%s'
+    fake_prefix = 's3://fake-bucket-68ae4b0ef7b9/_rename_batch_%s'
     src_dest_pairs = [(prefix % 'src', prefix % 'dest')
                       for prefix in (real_prefix, fake_prefix)]
 
@@ -302,7 +302,7 @@ class TestS3IO(unittest.TestCase):
     self.aws.delete(real_prefix % 'dest')
 
   def test_delete(self):
-    file_name = 's3://random-data-sets/_delete_file'
+    file_name = self.TEST_DATA_PATH + 'delete_file'
     file_size = 1024
 
     # Test deletion of non-existent file (shouldn't raise any error)
@@ -310,12 +310,12 @@ class TestS3IO(unittest.TestCase):
 
     # Create the file and check that it was created
     self._insert_random_file(self.aws.client, file_name, file_size)
-    files = self.aws.list_prefix('s3://random-data-sets/')
+    files = self.aws.list_prefix(self.TEST_DATA_PATH)
     self.assertTrue(file_name in files)
 
     # Delete the file and check that it was deleted
     self.aws.delete(file_name)
-    files = self.aws.list_prefix('s3://random-data-sets/')
+    files = self.aws.list_prefix(self.TEST_DATA_PATH)
     self.assertTrue(file_name not in files)
 
   def test_delete_batch(self, *unused_args):
