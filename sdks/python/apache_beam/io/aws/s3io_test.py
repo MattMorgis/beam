@@ -144,8 +144,8 @@ class TestS3IO(unittest.TestCase):
                     self.TEST_DATA_PATH + 'non-existent-destination')
 
   def test_copy_batch(self):
-    from_name_pattern = 's3://random-data-sets/copy_me_%d'
-    to_name_pattern = 's3://random-data-sets/destination_%d'
+    from_name_pattern = self.TEST_DATA_PATH + 'copy_me_%d'
+    to_name_pattern = self.TEST_DATA_PATH + 'destination_%d'
     file_size = 1024
     num_files = 10
 
@@ -184,8 +184,8 @@ class TestS3IO(unittest.TestCase):
     self.aws.delete_batch(all_files)
 
   def test_copytree(self):
-    src_dir_name = 's3://random-data-sets/source/'
-    dest_dir_name = 's3://random-data-sets/dest/'
+    src_dir_name = self.TEST_DATA_PATH + 'source/'
+    dest_dir_name = self.TEST_DATA_PATH + 'dest/'
     file_size = 1024
     paths = ['a', 'b/c', 'b/d']
     for path in paths:
@@ -193,9 +193,9 @@ class TestS3IO(unittest.TestCase):
       dest_file_name = dest_dir_name + path
       self._insert_random_file(self.client, src_file_name, file_size)
       self.assertTrue(
-          src_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+          src_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
       self.assertFalse(
-          dest_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+          dest_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
 
     self.aws.copytree(src_dir_name, dest_dir_name)
 
@@ -203,9 +203,9 @@ class TestS3IO(unittest.TestCase):
       src_file_name = src_dir_name + path
       dest_file_name = dest_dir_name + path
       self.assertTrue(
-          src_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+          src_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
       self.assertTrue(
-          dest_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+          dest_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
 
     # Clean up
     for path in paths:
@@ -214,30 +214,30 @@ class TestS3IO(unittest.TestCase):
       self.aws.delete_batch([src_file_name, dest_file_name])
 
   def test_rename(self):
-    src_file_name = 's3://random-data-sets/source'
-    dest_file_name = 's3://random-data-sets/dest'
+    src_file_name = self.TEST_DATA_PATH + 'source'
+    dest_file_name = self.TEST_DATA_PATH + 'dest'
     file_size = 1024
 
     self._insert_random_file(self.client, src_file_name, file_size)
 
     self.assertTrue(
-        src_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+        src_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
     self.assertFalse(
-        dest_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+        dest_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
 
     self.aws.rename(src_file_name, dest_file_name)
 
     self.assertFalse(
-        src_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+        src_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
     self.assertTrue(
-        dest_file_name in self.aws.list_prefix('s3://random-data-sets/'))
-    
+        dest_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
+
     # Clean up
     self.aws.delete_batch([src_file_name, dest_file_name])
 
   def test_rename_batch(self):
-    from_name_pattern = 's3://random-data-sets/_to_rename%d'
-    to_name_pattern = 's3://random-data-sets/_been_renamed%d'
+    from_name_pattern = self.TEST_DATA_PATH + 'to_rename_%d'
+    to_name_pattern = self.TEST_DATA_PATH + 'been_renamed_%d'
     file_size = 1024
     num_files = 10
 
