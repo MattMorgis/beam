@@ -75,11 +75,9 @@ class S3FileSystemTest(unittest.TestCase):
     with self.assertRaises(ValueError):
       self.fs.split('/no/s3/prefix')
 
-  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
-  def test_match_multiples(self, mock_s3io):
+  @mock.patch('apache_beam.io.aws.s3filesystem.s3io.S3IO')
+  def test_match_multiples(self, s3io_mock):
     # Prepare mocks.
-    s3io_mock = mock.MagicMock()
-    s3filesystem.s3io.S3IO = lambda: s3io_mock
     s3io_mock.list_prefix.return_value = {
         's3://bucket/file1': 1,
         's3://bucket/file2': 2
