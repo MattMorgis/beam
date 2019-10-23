@@ -291,6 +291,11 @@ class S3IO(object):
     self.delete(src)
 
   def exists(self, path):
+    """Returns whether the given S3 object exists.
+
+    Args:
+      path: S3 file path pattern in the form s3://<bucket>/<name>.
+    """
     bucket, object = parse_s3_path(path)
     request = messages.GetRequest(bucket, object)
     try:

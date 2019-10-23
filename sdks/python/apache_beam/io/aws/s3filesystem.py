@@ -199,7 +199,7 @@ class S3FileSystem(FileSystem):
 
     Returns: boolean flag indicating if path exists
     """
-    raise NotImplementedError
+    return s3io.S3IO().exists(path)
 
   def size(self, path):
     """Get size of path on the FileSystem.
