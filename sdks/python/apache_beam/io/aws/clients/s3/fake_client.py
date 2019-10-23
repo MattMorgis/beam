@@ -18,16 +18,20 @@
 from __future__ import absolute_import
 
 from apache_beam.io.aws.clients.s3 import messages
+import datetime
+import time
 
 
 
 class FakeFile(object):
 
-  def __init__(self, bucket, key, contents, last_modified=None, etag=None):
+  def __init__(self, bucket, key, contents, etag=None):
     self.bucket = bucket
     self.key = key
     self.contents = contents
-    self.last_modified = last_modified
+
+    self.last_modified = time.time()
+
     if not etag:
       self.etag = '"%s-1"' % ('x' * 32)
     else:
