@@ -224,11 +224,13 @@ class S3IO(object):
                       3)
         raise e
 
-  def delete_batch(self, paths):
+  def delete_batch(self, paths, max_batch_size=1000):
     """Deletes the objects at the given S3 paths.
 
     Args:
       paths: List of S3 file paths in the form s3://<bucket>/<name>
+      max_batch_size: Largest number of keys to send to the client to be deleted
+      simultaneously
 
     Returns: List of tuples of (path, exception) in the same order as the paths
              argument, where exception is None if the operation succeeded or
@@ -241,26 +243,45 @@ class S3IO(object):
     grouped_keys = {bucket: [] for bucket in buckets}
     for bucket, key in zip(buckets, keys): grouped_keys[bucket].append(key)
 
+    # For each bucket, delete minibatches of keys
     results = {}
     for bucket, keys in grouped_keys.items():
-      request = messages.DeleteBatchRequest(bucket, keys)
-      try: 
-        response = self.client.delete_batch(request)
-
-        for key in response.deleted:
-          results[(bucket, key)] = None
-
-        for key, error in zip(response.failed, response.errors):
-          results[(bucket, key)] = error
-
-      except messages.S3ClientError as e:
-        for key in keys:
-          results[(bucket, key)] = e
+      for i in range(0, len(keys), max_batch_size):
+        minibatch_keys = keys[i : i + max_batch_size]
+        results.update(self._delete_minibatch(bucket, minibatch_keys))
 
     # Organize final results
     final_results = [(path, results[parse_s3_path(path)]) for path in paths]
 
     return final_results
+
+  def _delete_minibatch(self, bucket, keys):
+    """Deletes the objects at the given S3 paths.
+
+    Args:
+      bucket: String bucket name
+      keys: List of keys to be deleted in the bucket
+
+    Returns: dict of the form {(bucket, key): error}, where error is None if the
+    operation succeeded
+    """
+    request = messages.DeleteBatchRequest(bucket, keys)
+    results = {}
+    try:
+      response = self.client.delete_batch(request)
+
+      for key in response.deleted:
+        results[(bucket, key)] = None
+
+      for key, error in zip(response.failed, response.errors):
+        results[(bucket, key)] = error
+
+    except messages.S3ClientError as e:
+      for key in keys:
+        results[(bucket, key)] = e
+
+    return results
+
 
   def delete_tree(self, root):
     """Deletes all objects under the given S3 root path.
