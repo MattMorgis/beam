@@ -225,7 +225,7 @@ class S3FileSystem(FileSystem):
     Raises:
       ``BeamIOError`` if path doesn't exist.
     """
-    raise NotImplementedError
+    return s3io.S3IO().last_updated(path)
 
   def checksum(self, path):
     """Fetch checksum metadata of a file on the
@@ -239,7 +239,10 @@ class S3FileSystem(FileSystem):
     Raises:
       ``BeamIOError`` if path isn't a file or doesn't exist.
     """
-    raise NotImplementedError
+    try:
+      return s3io.S3IO().checksum(path)
+    except Exception as e:  # pylint: disable=broad-except
+      raise BeamIOError("Checksum operation failed", {path: e})
 
   def delete(self, paths):
     raise NotImplementedError
