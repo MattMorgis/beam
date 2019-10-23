@@ -17,7 +17,6 @@
 """Tests for S3 client."""
 from __future__ import absolute_import
 
-import hashlib
 import os
 import logging
 import random
@@ -81,14 +80,26 @@ class TestS3IO(unittest.TestCase):
     return fakeFile
 
   def setUp(self):
-    # For pure unit tests, use this Fake S3 Client
-    # It will mock all calls to aws and no authentication is needed
-    self.client = fake_client.FakeS3Client()
-    self.aws = s3io.S3IO(self.client)
-    # For integration tests or to test over to the wire
-    # Initalize with no client and it will default to using Boto3
-    # Uncomment the following line:
-    # self.aws = s3io.S3IO()
+
+    # These tests can be run locally against a mock S3 client, or as integration
+    # tests against the real S3 client.
+    self.USE_MOCK = True
+
+    # If you're running integration tests with S3, set this variable to be an
+    # s3 path that you have access to where test data can be written. If you're
+    # just running tests against the mock, this can be any s3 path. It should
+    # end with a '/'.
+    self.TEST_DATA_PATH = 's3://random-data-sets/beam_tests/'
+
+    if self.USE_MOCK:
+      self.client = fake_client.FakeS3Client()
+      test_data_bucket, _ = s3io.parse_s3_path(self.TEST_DATA_PATH)
+      self.client.known_buckets.add(test_data_bucket)
+      self.aws = s3io.S3IO(self.client)
+
+    else:
+      self.aws = s3io.S3IO()
+      self.client = self.aws.client
 
   def test_size(self):
     file_name = 's3://random-data-sets/dummy_file'
@@ -100,7 +111,7 @@ class TestS3IO(unittest.TestCase):
 
   def test_checksum(self):
 
-    file_name = 's3://random-data-sets/_checksum'
+    file_name = self.TEST_DATA_PATH + 'checksum'
     file_size = 1024
     file_ = self._insert_random_file(self.client, file_name, file_size)
 
@@ -121,36 +132,34 @@ class TestS3IO(unittest.TestCase):
     self.aws.delete(file_name)
 
   def test_copy(self):
-    src_file_name = 's3://random-data-sets/source'
-    dest_file_name = 's3://random-data-sets/dest'
+    src_file_name = self.TEST_DATA_PATH + 'source'
+    dest_file_name = self.TEST_DATA_PATH + 'dest'
     file_size = 1024
     self._insert_random_file(self.client, src_file_name, file_size)
 
     self.assertTrue(src_file_name in
-                    self.aws.list_prefix('s3://random-data-sets/'))
+                    self.aws.list_prefix(self.TEST_DATA_PATH))
     self.assertFalse(dest_file_name in
-                     self.aws.list_prefix('s3://random-data-sets/'))
+                     self.aws.list_prefix(self.TEST_DATA_PATH))
 
     self.aws.copy(src_file_name, dest_file_name)
 
     self.assertTrue(src_file_name in
-                    self.aws.list_prefix('s3://random-data-sets/'))
+                    self.aws.list_prefix(self.TEST_DATA_PATH))
     self.assertTrue(dest_file_name in
-                    self.aws.list_prefix('s3://random-data-sets/'))
+                    self.aws.list_prefix(self.TEST_DATA_PATH))
 
     # Clean up
-    self.aws.delete_batch([
-        's3://random-data-sets/source',
-        's3://random-data-sets/dest'])
+    self.aws.delete_batch([src_file_name, dest_file_name])
 
     # Test copy of non-existent files.
     with self.assertRaisesRegex(messages.S3ClientError, r'Not Found'):
-      self.aws.copy('s3://random-data-sets/non-existent',
-                    's3://random-data-sets/non-existent-destination')
+      self.aws.copy(self.TEST_DATA_PATH + 'non-existent',
+                    self.TEST_DATA_PATH + 'non-existent-destination')
 
   def test_copy_batch(self):
-    from_name_pattern = 's3://random-data-sets/copy_me_%d'
-    to_name_pattern = 's3://random-data-sets/destination_%d'
+    from_name_pattern = self.TEST_DATA_PATH + 'copy_me_%d'
+    to_name_pattern = self.TEST_DATA_PATH + 'destination_%d'
     file_size = 1024
     num_files = 10
 
@@ -189,8 +198,8 @@ class TestS3IO(unittest.TestCase):
     self.aws.delete_batch(all_files)
 
   def test_copytree(self):
-    src_dir_name = 's3://random-data-sets/source/'
-    dest_dir_name = 's3://random-data-sets/dest/'
+    src_dir_name = self.TEST_DATA_PATH + 'source/'
+    dest_dir_name = self.TEST_DATA_PATH + 'dest/'
     file_size = 1024
     paths = ['a', 'b/c', 'b/d']
     for path in paths:
@@ -198,9 +207,9 @@ class TestS3IO(unittest.TestCase):
       dest_file_name = dest_dir_name + path
       self._insert_random_file(self.client, src_file_name, file_size)
       self.assertTrue(
-          src_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+          src_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
       self.assertFalse(
-          dest_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+          dest_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
 
     self.aws.copytree(src_dir_name, dest_dir_name)
 
@@ -208,9 +217,9 @@ class TestS3IO(unittest.TestCase):
       src_file_name = src_dir_name + path
       dest_file_name = dest_dir_name + path
       self.assertTrue(
-          src_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+          src_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
       self.assertTrue(
-          dest_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+          dest_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
 
     # Clean up
     for path in paths:
@@ -219,30 +228,30 @@ class TestS3IO(unittest.TestCase):
       self.aws.delete_batch([src_file_name, dest_file_name])
 
   def test_rename(self):
-    src_file_name = 's3://random-data-sets/source'
-    dest_file_name = 's3://random-data-sets/dest'
+    src_file_name = self.TEST_DATA_PATH + 'source'
+    dest_file_name = self.TEST_DATA_PATH + 'dest'
     file_size = 1024
 
     self._insert_random_file(self.client, src_file_name, file_size)
 
     self.assertTrue(
-        src_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+        src_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
     self.assertFalse(
-        dest_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+        dest_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
 
     self.aws.rename(src_file_name, dest_file_name)
 
     self.assertFalse(
-        src_file_name in self.aws.list_prefix('s3://random-data-sets/'))
+        src_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
     self.assertTrue(
-        dest_file_name in self.aws.list_prefix('s3://random-data-sets/'))
-    
+        dest_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
+
     # Clean up
     self.aws.delete_batch([src_file_name, dest_file_name])
 
   def test_rename_batch(self):
-    from_name_pattern = 's3://random-data-sets/_to_rename%d'
-    to_name_pattern = 's3://random-data-sets/_been_renamed%d'
+    from_name_pattern = self.TEST_DATA_PATH + 'to_rename_%d'
+    to_name_pattern = self.TEST_DATA_PATH + 'been_renamed_%d'
     file_size = 1024
     num_files = 10
 
@@ -282,8 +291,8 @@ class TestS3IO(unittest.TestCase):
     self.aws.delete_batch(all_files)
 
   def test_rename_batch_with_errors(self):
-    real_prefix = 's3://random-data-sets/_rename_batch/%s'
-    fake_prefix = 's3://fake-bucket-68ae4b0ef7b9/_rename_batch/%s'
+    real_prefix = self.TEST_DATA_PATH + 'rename_batch_%s'
+    fake_prefix = 's3://fake-bucket-68ae4b0ef7b9/rename_batch_%s'
     src_dest_pairs = [(prefix % 'src', prefix % 'dest')
                       for prefix in (real_prefix, fake_prefix)]
 
@@ -307,7 +316,7 @@ class TestS3IO(unittest.TestCase):
     self.aws.delete(real_prefix % 'dest')
 
   def test_delete(self):
-    file_name = 's3://random-data-sets/_delete_file'
+    file_name = self.TEST_DATA_PATH + 'delete_file'
     file_size = 1024
 
     # Test deletion of non-existent file (shouldn't raise any error)
@@ -315,16 +324,16 @@ class TestS3IO(unittest.TestCase):
 
     # Create the file and check that it was created
     self._insert_random_file(self.aws.client, file_name, file_size)
-    files = self.aws.list_prefix('s3://random-data-sets/')
+    files = self.aws.list_prefix(self.TEST_DATA_PATH)
     self.assertTrue(file_name in files)
 
     # Delete the file and check that it was deleted
     self.aws.delete(file_name)
-    files = self.aws.list_prefix('s3://random-data-sets/')
+    files = self.aws.list_prefix(self.TEST_DATA_PATH)
     self.assertTrue(file_name not in files)
 
   def test_delete_batch(self, *unused_args):
-    file_name_pattern = 's3://random-data-sets/_delete_batch/%d'
+    file_name_pattern = self.TEST_DATA_PATH + 'delete_batch/%d'
     file_size = 1024
     num_files = 5
 
@@ -353,10 +362,9 @@ class TestS3IO(unittest.TestCase):
       self.assertFalse(self.aws.exists(file_name_pattern % i))
 
   def test_delete_batch_with_errors(self, *unused_args):
-    real_bucket = 'random-data-sets'
-    fake_bucket = 'fake-bucket-does-not-exist-as-far-as-i-know-54ef81de913a'
-    filenames = ['s3://' + bucket + '/_delete_batch/file'
-                 for bucket in (real_bucket, fake_bucket)]
+    real_file = self.TEST_DATA_PATH + 'delete_batch/file'
+    fake_file = 's3://fake-bucket-68ae4b0ef7b9/delete_batch/file'
+    filenames = [real_file, fake_file]
 
     result = self.aws.delete_batch(filenames)
 
@@ -370,7 +378,7 @@ class TestS3IO(unittest.TestCase):
 
   def test_delete_tree(self):
 
-    root_path = 's3://random-data-sets/_delete_tree/'
+    root_path = self.TEST_DATA_PATH + 'delete_tree/'
     leaf_paths = ['a', 'b/c', 'b/d', 'b/d/e']
     paths = [root_path + leaf for leaf in leaf_paths]
 
@@ -391,7 +399,7 @@ class TestS3IO(unittest.TestCase):
       self.assertFalse(self.aws.exists(path))
 
   def test_exists(self):
-    file_name = 's3://random-data-sets/_exists'
+    file_name = self.TEST_DATA_PATH + 'exists'
     file_size = 1024
 
     self.assertFalse(self.aws.exists(file_name))
@@ -406,14 +414,17 @@ class TestS3IO(unittest.TestCase):
     self.assertFalse(self.aws.exists(file_name))
 
   def test_file_mode(self):
-    file_name = 's3://random-data-sets/jerry/pigpen/bobby'
+    file_name = self.TEST_DATA_PATH + 'jerry/pigpen/bobby'
     with self.aws.open(file_name, 'w') as f:
       assert f.mode == 'w'
     with self.aws.open(file_name, 'r') as f:
       assert f.mode == 'r'
 
+    # Clean up
+    self.aws.delete(file_name)
+
   def test_full_file_read(self):
-    file_name = 's3://random-data-sets/jerry/pigpen/phil'
+    file_name = self.TEST_DATA_PATH + 'jerry/pigpen/phil'
     file_size = 1024
 
     f = self._insert_random_file(self.aws.client, file_name, file_size)
@@ -427,8 +438,11 @@ class TestS3IO(unittest.TestCase):
     f.seek(0)
     self.assertEqual(f.read(), contents)
 
+    # Clean up
+    self.aws.delete(file_name)
+
   def test_file_write(self):
-    file_name = 's3://random-data-sets/_write_file'
+    file_name = self.TEST_DATA_PATH + 'write_file'
     file_size = 8 * 1024 * 1024 + 2000
     contents = os.urandom(file_size)
     f = self.aws.open(file_name, 'w')
@@ -442,28 +456,12 @@ class TestS3IO(unittest.TestCase):
     self.assertEqual(
         new_f_contents, contents)
 
-  # This takes a long time to run
-  # but helpful if needed to debug the write buffer
-  # By default, parts of a multipart upload can't be bigger than 5GB
-  #def test_big_file_write(self):
-  #  KiB, MiB, GiB = 1024, 1024 * 1024, 1024 * 1024 * 1024
-  #  file_name = 's3://random-data-sets/_write_file'
-  #  file_size = 7 * GiB
-  #  contents = os.urandom(file_size)
-  #  f = self.aws.open(file_name, 'w')
-  #  self.assertEqual(f.mode, 'w')
-  #  f.write(contents[:1 * MiB])
-  #  f.write(contents[1 * MiB : 6 * GiB])
-  #  f.write(contents[6 * GiB : ])
-  #  f.close()
-  #  bucket, name = s3io.parse_s3_path(file_name)
-  #  new_f = self.aws.open(file_name, 'r')
-  #  new_f_contents = new_f.read()
-  #  self.assertEqual(
-  #      new_f_contents, contents)
+    # Clean up
+    self.aws.delete(file_name)
+
 
   def test_file_random_seek(self):
-    file_name = 's3://random-data-sets/_write_seek_file'
+    file_name = self.TEST_DATA_PATH + 'write_seek_file'
     file_size = 5 * 1024 * 1024 - 100
     contents = os.urandom(file_size)
     with self.aws.open(file_name, 'w') as wf:
@@ -484,9 +482,12 @@ class TestS3IO(unittest.TestCase):
           f.read(end - start + 1), contents[start:end + 1]
       )
       self.assertEqual(f.tell(), end + 1)
+    
+    # Clean up
+    self.aws.delete(file_name)
 
   def test_file_flush(self):
-    file_name = 's3://random-data-sets/_flush_file'
+    file_name = self.TEST_DATA_PATH + 'flush_file'
     file_size = 5 * 1024 * 1024 + 2000
     contents = os.urandom(file_size)
     f = self.aws.open(file_name, 'w')
@@ -503,8 +504,11 @@ class TestS3IO(unittest.TestCase):
     self.assertEqual(
         new_f_contents, contents)
 
+    # Clean up
+    self.aws.delete(file_name)
+
   def test_file_iterator(self):
-    file_name = 's3://random-data-sets/_iterate_file'
+    file_name = self.TEST_DATA_PATH + 'iterate_file'
     lines = []
     line_count = 10
     for _ in range(line_count):
@@ -525,8 +529,11 @@ class TestS3IO(unittest.TestCase):
 
     self.assertEqual(read_lines, line_count)
 
+    # Clean up
+    self.aws.delete(file_name)
+
   def test_file_read_line(self):
-    file_name = 's3://random-data-sets/_read_line_file'
+    file_name = self.TEST_DATA_PATH + 'read_line_file'
     lines = []
 
     # Set a small buffer size to exercise refilling the buffer.
@@ -578,8 +585,11 @@ class TestS3IO(unittest.TestCase):
       f.seek(start)
       self.assertEqual(f.readline(), lines[line_index][chars_left:])
 
+    # Clean up
+    self.aws.delete(file_name)
+
   def test_file_close(self):
-    file_name = 's3://random-data-sets/_close_file'
+    file_name = self.TEST_DATA_PATH + 'close_file'
     file_size = 5 * 1024 * 1024 + 2000
     contents = os.urandom(file_size)
     f = self.aws.open(file_name, 'w')
@@ -594,9 +604,12 @@ class TestS3IO(unittest.TestCase):
     self.assertEqual(
         read_contents, contents)
 
+    # Clean up
+    self.aws.delete(file_name)
+
   def test_context_manager(self):
     # Test writing with a context manager.
-    file_name = 's3://random-data-sets/_context_manager_file'
+    file_name = self.TEST_DATA_PATH + 'context_manager_file'
     file_size = 1024
     contents = os.urandom(file_size)
     with self.aws.open(file_name, 'w') as f:
@@ -605,8 +618,10 @@ class TestS3IO(unittest.TestCase):
     with self.aws.open(file_name, 'r') as f:
       self.assertEqual(f.read(), contents)
 
+    # Clean up
+    self.aws.delete(file_name)
+
   def test_list_prefix(self):
-    bucket_name = 'random-data-sets'
 
     objects = [
         ('jerry/pigpen/phil', 5),
@@ -615,31 +630,35 @@ class TestS3IO(unittest.TestCase):
     ]
 
     for (object_name, size) in objects:
-      file_name = 's3://%s/%s' % (bucket_name, object_name)
+      file_name = self.TEST_DATA_PATH + object_name
       self._insert_random_file(self.aws.client, file_name, size)
 
     test_cases = [
-        ('s3://random-data-sets/j', [
+        (self.TEST_DATA_PATH + 'j', [
             ('jerry/pigpen/phil', 5),
             ('jerry/pigpen/bobby', 3),
             ('jerry/billy/bobby', 4),
         ]),
-        ('s3://random-data-sets/jerry/', [
+        (self.TEST_DATA_PATH + 'jerry/', [
             ('jerry/pigpen/phil', 5),
             ('jerry/pigpen/bobby', 3),
             ('jerry/billy/bobby', 4),
         ]),
-        ('s3://random-data-sets/jerry/pigpen/phil', [
+        (self.TEST_DATA_PATH + 'jerry/pigpen/phil', [
             ('jerry/pigpen/phil', 5),
         ]),
     ]
 
     for file_pattern, expected_object_names in test_cases:
-      expected_file_names = [('s3://%s/%s' % (bucket_name, object_name), size)
+      expected_file_names = [(self.TEST_DATA_PATH + object_name, size)
                              for (object_name, size) in expected_object_names]
       self.assertEqual(
           set(self.aws.list_prefix(file_pattern).items()),
           set(expected_file_names))
+
+    # Clean up
+    for (object_name, size) in objects: 
+      self.aws.delete(self.TEST_DATA_PATH + object_name)
 
 
 if __name__ == '__main__':

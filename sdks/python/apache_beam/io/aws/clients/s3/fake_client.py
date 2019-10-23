@@ -17,9 +17,8 @@
 
 from __future__ import absolute_import
 
-import os
-
 from apache_beam.io.aws.clients.s3 import messages
+
 
 
 class FakeFile(object):
@@ -52,8 +51,10 @@ class FakeS3Client(object):
     self.list_continuation_tokens = {}
     self.multipart_uploads = {}
 
-    # TODO: import known buckets from where it's officially configured
-    self.known_buckets = {'random-data-sets'}
+    # boto3 has different behavior when running some operations against a bucket
+    # that exists vs. against one that doesn't. To emulate that behavior, the
+    # mock client keeps a set of bucket names that it knows "exist".
+    self.known_buckets = set()
 
   def add_file(self, f):
     self.files[(f.bucket, f.key)] = f
@@ -89,7 +90,7 @@ class FakeS3Client(object):
 
     for file_bucket, file_name in sorted(iter(self.files)):
       if bucket == file_bucket and file_name.startswith(prefix):
-        file_object = self.files[(file_bucket, file_name)].get_metadata()
+        file_object = self.get_file(file_bucket, file_name).get_metadata()
         matching_files.append(file_object)
 
     # Handle pagination.
