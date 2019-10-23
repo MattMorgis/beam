@@ -55,11 +55,8 @@ class FakeS3Client(object):
 
     # boto3 has different behavior when running some operations against a bucket
     # that exists vs. against one that doesn't. To emulate that behavior, the
-    # mock client keeps a set of bucket names that it knows "exist" (in
-    # self.known_buckets). To start, we populate that set with the bucket from
-    # the TEST_DATA_PATH in the s3io tests.
-    test_data_bucket, _ = parse_s3_path(s3io_test.TestS3IO.TEST_DATA_PATH)
-    self.known_buckets = {test_data_bucket}
+    # mock client keeps a set of bucket names that it knows "exist".
+    self.known_buckets = set()
 
   def add_file(self, f):
     self.files[(f.bucket, f.key)] = f

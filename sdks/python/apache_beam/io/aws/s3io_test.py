@@ -70,17 +70,6 @@ class TestS3PathParser(unittest.TestCase):
 
 class TestS3IO(unittest.TestCase):
 
-  # These tests can be run locally against a mock S3 client, or as integration
-  # tests against the real S3 client.
-  USE_MOCK = True
-
-  # If you're running integration tests with S3, set this variable to be an
-  # s3 path that you have access to where test data can be written. If you're
-  # just running tests against the mock, this can be any s3 path. It should
-  # end with a '/'.
-  TEST_DATA_PATH = 's3://random-data-sets/beam_tests/'
-
-
   def _insert_random_file(self, client, path, size):
     bucket, name = s3io.parse_s3_path(path)
     contents = os.urandom(size)
@@ -92,8 +81,20 @@ class TestS3IO(unittest.TestCase):
 
   def setUp(self):
 
+    # These tests can be run locally against a mock S3 client, or as integration
+    # tests against the real S3 client.
+    self.USE_MOCK = True
+
+    # If you're running integration tests with S3, set this variable to be an
+    # s3 path that you have access to where test data can be written. If you're
+    # just running tests against the mock, this can be any s3 path. It should
+    # end with a '/'.
+    self.TEST_DATA_PATH = 's3://random-data-sets/beam_tests/'
+
     if self.USE_MOCK:
       self.client = fake_client.FakeS3Client()
+      test_data_bucket, _ = s3io.parse_s3_path(self.TEST_DATA_PATH)
+      self.client.known_buckets.add(test_data_bucket)
       self.aws = s3io.S3IO(self.client)
 
     else:
