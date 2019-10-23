@@ -212,7 +212,7 @@ class S3FileSystem(FileSystem):
     Raises:
       ``BeamIOError`` if path doesn't exist.
     """
-    raise NotImplementedError
+    return s3io.S3IO().size(path)
 
   def last_updated(self, path):
     """Get UNIX Epoch time in seconds on the FileSystem.
