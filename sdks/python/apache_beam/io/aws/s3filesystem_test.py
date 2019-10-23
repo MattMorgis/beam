@@ -121,11 +121,11 @@ class S3FileSystemTest(unittest.TestCase):
     exception = IOError('Failed')
     s3io_mock.list_prefix.side_effect = exception
 
-    with self.assertRaisesRegexp(BeamIOError,
-                                 r'^Match operation failed') as error:
+    with self.assertRaisesRegex(BeamIOError,
+                                r'^Match operation failed') as error:
       self.fs.match(['s3://bucket/'])
-    self.assertRegexpMatches(str(error.exception.exception_details),
-                             r's3://bucket/.*%s' % exception)
+    self.assertRegex(str(error.exception.exception_details),
+                     r's3://bucket/.*%s' % exception)
     s3io_mock.list_prefix.assert_called_once_with('s3://bucket/')
 
   def test_match_multiple_patterns(self):
@@ -144,6 +144,26 @@ class S3FileSystemTest(unittest.TestCase):
     self.assertEqual(
         [mr.metadata_list for mr in result],
         expected_results)
+
+  def test_create(self):
+    # Prepare mocks.
+    s3io_mock = mock.MagicMock()
+    s3filesystem.s3io.S3IO = lambda: s3io_mock
+    # Issue file copy
+    _ = self.fs.create('s3://bucket/from1', 'application/octet-stream')
+
+    s3io_mock.open.assert_called_once_with(
+        's3://bucket/from1', 'wb', mime_type='application/octet-stream')
+
+  def test_open(self):
+    # Prepare mocks.
+    s3io_mock = mock.MagicMock()
+    s3filesystem.s3io.S3IO = lambda: s3io_mock
+    # Issue file copy
+    _ = self.fs.open('s3://bucket/from1', 'application/octet-stream')
+
+    s3io_mock.open.assert_called_once_with(
+        's3://bucket/from1', 'rb', mime_type='application/octet-stream')
 
 
 if __name__ == '__main__':

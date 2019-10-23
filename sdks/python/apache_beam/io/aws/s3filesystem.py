@@ -61,6 +61,18 @@ class S3FileSystem(FileSystem):
     return path
 
   def split(self, path):
+    """Splits the given path into two parts.
+
+    Splits the path into a pair (head, tail) such that tail contains the last
+    component of the path and head contains everything up to that.
+
+    Head will include the S3 prefix ('s3://').
+
+    Args:
+      path: path as a string
+    Returns:
+      a pair of path components as strings.
+    """
     path = path.strip()
     if not path.startswith(S3FileSystem.S3_PREFIX):
       raise ValueError('Path %r must be S3 path.' % path)
@@ -113,6 +125,17 @@ class S3FileSystem(FileSystem):
     except Exception as e:  # pylint: disable=broad-except
       raise BeamIOError("List operation failed", {dir_or_prefix: e})
 
+  def _path_open(self, path, mode, mime_type='application/octet-stream',
+                 compression_type=CompressionTypes.AUTO):
+    """Helper functions to open a file in the provided mode.
+    """
+    compression_type = FileSystem._get_compression_type(path, compression_type)
+    mime_type = CompressionTypes.mime_type(compression_type, mime_type)
+    raw_file = s3io.S3IO().open(path, mode, mime_type=mime_type)
+    if compression_type == CompressionTypes.UNCOMPRESSED:
+      return raw_file
+    return CompressedFile(raw_file, compression_type=compression_type)
+
   def create(self, path, mime_type='application/octet-stream',
              compression_type=CompressionTypes.AUTO):
     """Returns a write channel for the given file path.
@@ -124,7 +147,7 @@ class S3FileSystem(FileSystem):
 
     Returns: file handle with a close function for the user to use
     """
-    raise NotImplementedError
+    return self._path_open(path, 'wb', mime_type, compression_type)
 
   def open(self, path, mime_type='application/octet-stream',
            compression_type=CompressionTypes.AUTO):
@@ -137,7 +160,7 @@ class S3FileSystem(FileSystem):
 
     Returns: file handle with a close function for the user to use
     """
-    raise NotImplementedError
+    return self._path_open(path, 'rb', mime_type, compression_type)
 
   def copy(self, source_file_names, destination_file_names):
     """Recursively copy the file tree from the source to the destination
@@ -176,7 +199,7 @@ class S3FileSystem(FileSystem):
 
     Returns: boolean flag indicating if path exists
     """
-    raise NotImplementedError
+    return s3io.S3IO().exists(path)
 
   def size(self, path):
     """Get size of path on the FileSystem.
