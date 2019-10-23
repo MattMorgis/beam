@@ -112,6 +112,9 @@ class Client(object):
 
     boto_response = self.client.list_objects_v2(**kwargs)
 
+    if boto_response['KeyCount'] == 0:
+      return messages.ListResponse([])
+
     items = [messages.Item(etag=content['ETag'],
                            key=content['Key'],
                            last_modified=content['LastModified'],
