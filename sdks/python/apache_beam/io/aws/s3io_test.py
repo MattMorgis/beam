@@ -99,6 +99,7 @@ class TestS3IO(unittest.TestCase):
 
     else:
       self.aws = s3io.S3IO()
+      self.client = self.aws.client
 
 
 

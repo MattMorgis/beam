@@ -18,7 +18,7 @@ class ClientErrorTest(unittest.TestCase):
 
     # These tests can be run locally against a mock S3 client, or as integration
     # tests against the real S3 client.
-    self.USE_MOCK = False
+    self.USE_MOCK = True
 
     # If you're running integration tests with S3, set this variable to be an
     # s3 path that you have access to where test data can be written. If you're
