@@ -145,6 +145,16 @@ class S3FileSystemTest(unittest.TestCase):
         [mr.metadata_list for mr in result],
         expected_results)
 
+  def test_create(self):
+    # Prepare mocks.
+    s3io_mock = mock.MagicMock()
+    s3filesystem.s3io.S3IO = lambda: s3io_mock
+    # Issue file copy
+    _ = self.fs.create('s3://bucket/from1', 'application/octet-stream')
+
+    s3io_mock.open.assert_called_once_with(
+        's3://bucket/from1', 'wb', mime_type='application/octet-stream')
+
 
 if __name__ == '__main__':
   logging.getLogger().setLevel(logging.INFO)
