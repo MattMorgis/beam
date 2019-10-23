@@ -94,6 +94,9 @@ class TestS3IO(unittest.TestCase):
     # TODO: document this
     self.TEST_DATA_PATH = 's3://random-data-sets/beam_tests/'
 
+  #def tearDown(self):
+  #  self.assertEqual(self.client.files, dict())
+
 
   def test_checksum(self):
 
@@ -348,7 +351,7 @@ class TestS3IO(unittest.TestCase):
       self.assertFalse(self.aws.exists(file_name_pattern % i))
 
   def test_delete_batch_with_errors(self, *unused_args):
-    real_file = self.TEST_DATA_PATH + '/delete_batch/file'
+    real_file = self.TEST_DATA_PATH + 'delete_batch/file'
     fake_file = 's3://fake-bucket-68ae4b0ef7b9/delete_batch/file'
     filenames = [real_file, fake_file]
 
@@ -385,7 +388,7 @@ class TestS3IO(unittest.TestCase):
       self.assertFalse(self.aws.exists(path))
 
   def test_exists(self):
-    file_name = 's3://random-data-sets/_exists'
+    file_name = self.TEST_DATA_PATH + 'exists'
     file_size = 1024
 
     self.assertFalse(self.aws.exists(file_name))
@@ -400,14 +403,17 @@ class TestS3IO(unittest.TestCase):
     self.assertFalse(self.aws.exists(file_name))
 
   def test_file_mode(self):
-    file_name = 's3://random-data-sets/jerry/pigpen/bobby'
+    file_name = self.TEST_DATA_PATH + 'jerry/pigpen/bobby'
     with self.aws.open(file_name, 'w') as f:
       assert f.mode == 'w'
     with self.aws.open(file_name, 'r') as f:
       assert f.mode == 'r'
 
+    # Clean up
+    self.aws.delete(file_name)
+
   def test_full_file_read(self):
-    file_name = 's3://random-data-sets/jerry/pigpen/phil'
+    file_name = self.TEST_DATA_PATH + 'jerry/pigpen/phil'
     file_size = 1024
 
     f = self._insert_random_file(self.aws.client, file_name, file_size)
@@ -421,8 +427,11 @@ class TestS3IO(unittest.TestCase):
     f.seek(0)
     self.assertEqual(f.read(), contents)
 
+    # Clean up
+    self.aws.delete(file_name)
+
   def test_file_write(self):
-    file_name = 's3://random-data-sets/_write_file'
+    file_name = self.TEST_DATA_PATH + 'write_file'
     file_size = 8 * 1024 * 1024 + 2000
     contents = os.urandom(file_size)
     f = self.aws.open(file_name, 'w')
@@ -436,28 +445,12 @@ class TestS3IO(unittest.TestCase):
     self.assertEqual(
         new_f_contents, contents)
 
-  # This takes a long time to run
-  # but helpful if needed to debug the write buffer
-  # By default, parts of a multipart upload can't be bigger than 5GB
-  #def test_big_file_write(self):
-  #  KiB, MiB, GiB = 1024, 1024 * 1024, 1024 * 1024 * 1024
-  #  file_name = 's3://random-data-sets/_write_file'
-  #  file_size = 7 * GiB
-  #  contents = os.urandom(file_size)
-  #  f = self.aws.open(file_name, 'w')
-  #  self.assertEqual(f.mode, 'w')
-  #  f.write(contents[:1 * MiB])
-  #  f.write(contents[1 * MiB : 6 * GiB])
-  #  f.write(contents[6 * GiB : ])
-  #  f.close()
-  #  bucket, name = s3io.parse_s3_path(file_name)
-  #  new_f = self.aws.open(file_name, 'r')
-  #  new_f_contents = new_f.read()
-  #  self.assertEqual(
-  #      new_f_contents, contents)
+    # Clean up
+    self.aws.delete(file_name)
+
 
   def test_file_random_seek(self):
-    file_name = 's3://random-data-sets/_write_seek_file'
+    file_name = self.TEST_DATA_PATH + 'write_seek_file'
     file_size = 5 * 1024 * 1024 - 100
     contents = os.urandom(file_size)
     with self.aws.open(file_name, 'w') as wf:
@@ -480,7 +473,7 @@ class TestS3IO(unittest.TestCase):
       self.assertEqual(f.tell(), end + 1)
 
   def test_file_flush(self):
-    file_name = 's3://random-data-sets/_flush_file'
+    file_name = self.TEST_DATA_PATH + 'flush_file'
     file_size = 5 * 1024 * 1024 + 2000
     contents = os.urandom(file_size)
     f = self.aws.open(file_name, 'w')
@@ -498,7 +491,7 @@ class TestS3IO(unittest.TestCase):
         new_f_contents, contents)
 
   def test_file_iterator(self):
-    file_name = 's3://random-data-sets/_iterate_file'
+    file_name = self.TEST_DATA_PATH + 'iterate_file'
     lines = []
     line_count = 10
     for _ in range(line_count):
@@ -520,7 +513,7 @@ class TestS3IO(unittest.TestCase):
     self.assertEqual(read_lines, line_count)
 
   def test_file_read_line(self):
-    file_name = 's3://random-data-sets/_read_line_file'
+    file_name = self.TEST_DATA_PATH + 'read_line_file'
     lines = []
 
     # Set a small buffer size to exercise refilling the buffer.
@@ -573,7 +566,7 @@ class TestS3IO(unittest.TestCase):
       self.assertEqual(f.readline(), lines[line_index][chars_left:])
 
   def test_file_close(self):
-    file_name = 's3://random-data-sets/_close_file'
+    file_name = self.TEST_DATA_PATH + 'close_file'
     file_size = 5 * 1024 * 1024 + 2000
     contents = os.urandom(file_size)
     f = self.aws.open(file_name, 'w')
@@ -590,7 +583,7 @@ class TestS3IO(unittest.TestCase):
 
   def test_context_manager(self):
     # Test writing with a context manager.
-    file_name = 's3://random-data-sets/_context_manager_file'
+    file_name = self.TEST_DATA_PATH + 'context_manager_file'
     file_size = 1024
     contents = os.urandom(file_size)
     with self.aws.open(file_name, 'w') as f:
@@ -600,7 +593,6 @@ class TestS3IO(unittest.TestCase):
       self.assertEqual(f.read(), contents)
 
   def test_list_prefix(self):
-    bucket_name = 'random-data-sets'
 
     objects = [
         ('jerry/pigpen/phil', 5),
@@ -609,27 +601,27 @@ class TestS3IO(unittest.TestCase):
     ]
 
     for (object_name, size) in objects:
-      file_name = 's3://%s/%s' % (bucket_name, object_name)
+      file_name = self.TEST_DATA_PATH + object_name
       self._insert_random_file(self.aws.client, file_name, size)
 
     test_cases = [
-        ('s3://random-data-sets/j', [
+        (self.TEST_DATA_PATH + 'j', [
             ('jerry/pigpen/phil', 5),
             ('jerry/pigpen/bobby', 3),
             ('jerry/billy/bobby', 4),
         ]),
-        ('s3://random-data-sets/jerry/', [
+        (self.TEST_DATA_PATH + 'jerry/', [
             ('jerry/pigpen/phil', 5),
             ('jerry/pigpen/bobby', 3),
             ('jerry/billy/bobby', 4),
         ]),
-        ('s3://random-data-sets/jerry/pigpen/phil', [
+        (self.TEST_DATA_PATH + 'jerry/pigpen/phil', [
             ('jerry/pigpen/phil', 5),
         ]),
     ]
 
     for file_pattern, expected_object_names in test_cases:
-      expected_file_names = [('s3://%s/%s' % (bucket_name, object_name), size)
+      expected_file_names = [(self.TEST_DATA_PATH + object_name, size)
                              for (object_name, size) in expected_object_names]
       self.assertEqual(
           set(self.aws.list_prefix(file_pattern).items()),
