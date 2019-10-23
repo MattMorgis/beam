@@ -71,10 +71,10 @@ class TestS3PathParser(unittest.TestCase):
 
 class TestS3IO(unittest.TestCase):
 
-  def _insert_random_file(self, client, path, size):
+  def _insert_random_file(self, client, path, size, last_modified=None):
     bucket, name = s3io.parse_s3_path(path)
     contents = os.urandom(size)
-    fakeFile = fake_client.FakeFile(bucket, name, contents)
+    fakeFile = fake_client.FakeFile(bucket, name, contents, last_modified=last_modified)
     f = self.aws.open(path, 'w')
     f.write(contents)
     f.close()
@@ -97,6 +97,16 @@ class TestS3IO(unittest.TestCase):
     self._insert_random_file(self.client, file_name, file_size)
     self.assertTrue(self.aws.exists(file_name))
     self.assertEqual(1234, self.aws.size(file_name))
+
+  def test_last_updated(self):
+    file_name = 's3://random-data-sets/dummy_file'
+    file_size = 1234
+    last_modified = 123456.78
+
+    self._insert_random_file(self.client, file_name, file_size,
+                             last_modified=last_modified)
+    self.assertTrue(self.aws.exists(file_name))
+    self.assertEqual(last_modified, self.aws.last_updated(file_name))
 
   def test_checksum(self):
 

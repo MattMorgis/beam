@@ -305,6 +305,22 @@ class S3IO(object):
     self.copy(src, dest)
     self.delete(src)
 
+  @retry.with_exponential_backoff(
+      retry_filter=retry.retry_on_server_errors_and_timeout_filter)
+  def last_updated(self, path):
+    """Returns the last updated epoch time of a single S3 object.
+
+    This method does not perform glob expansion. Hence the given path must be
+    for a single S3 object.
+
+    Returns: last updated time of the S3 object in second.
+    """
+    bucket, object = parse_s3_path(path)
+    request = messages.GetRequest(bucket, object)
+    datetime = self.client.get_object_metadata(request)
+    return (time.mktime(datetime.timetuple()) - time.timezone
+            + datetime.microsecond / 1000000.0)
+
   def exists(self, path):
     """Returns whether the given S3 object exists.
 
