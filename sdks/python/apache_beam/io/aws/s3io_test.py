@@ -20,6 +20,7 @@ from __future__ import absolute_import
 import os
 import logging
 import random
+import time
 import unittest
 
 from apache_beam.io.aws.clients.s3 import fake_client
@@ -70,13 +71,19 @@ class TestS3PathParser(unittest.TestCase):
 
 class TestS3IO(unittest.TestCase):
 
-  def _insert_random_file(self, client, path, size, last_modified=None):
+  def _insert_random_file(self, client, path, size):
     bucket, name = s3io.parse_s3_path(path)
     contents = os.urandom(size)
-    fakeFile = fake_client.FakeFile(bucket, name, contents, last_modified=last_modified)
-    f = self.aws.open(path, 'w')
-    f.write(contents)
-    f.close()
+    fakeFile = fake_client.FakeFile(bucket, name, contents)
+
+    if self.USE_MOCK:
+      self.client.add_file(fakeFile)
+
+    else:
+      f = self.aws.open(path, 'w')
+      f.write(contents)
+      f.close()
+
     return fakeFile
 
   def setUp(self):
@@ -112,12 +119,14 @@ class TestS3IO(unittest.TestCase):
   def test_last_updated(self):
     file_name = 's3://random-data-sets/dummy_file'
     file_size = 1234
-    last_modified = 123456.78
 
-    self._insert_random_file(self.client, file_name, file_size,
-                             last_modified=last_modified)
+    self._insert_random_file(self.client, file_name, file_size)
     self.assertTrue(self.aws.exists(file_name))
-    self.assertEqual(last_modified, self.aws.last_updated(file_name))
+
+    tolerance = 5 * 60 # 5 mins
+    low_bound, high_bound = time.time() - tolerance, time.time() + tolerance
+    result = self.aws.last_updated(file_name)
+    self.assertTrue(low_bound <= result <= high_bound)
 
   def test_checksum(self):
 

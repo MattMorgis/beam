@@ -317,7 +317,7 @@ class S3IO(object):
     """
     bucket, object = parse_s3_path(path)
     request = messages.GetRequest(bucket, object)
-    datetime = self.client.get_object_metadata(request)
+    datetime = self.client.get_object_metadata(request).last_modified
     return (time.mktime(datetime.timetuple()) - time.timezone
             + datetime.microsecond / 1000000.0)
 
