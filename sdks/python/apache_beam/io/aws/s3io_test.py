@@ -85,13 +85,18 @@ class TestS3IO(unittest.TestCase):
     # It will mock all calls to aws and no authentication is needed
     self.client = fake_client.FakeS3Client()
     self.aws = s3io.S3IO(self.client)
+
     # For integration tests or to test over to the wire
     # Initalize with no client and it will default to using Boto3
     # Uncomment the following line:
     # self.aws = s3io.S3IO()
 
-    # TODO: document this
+    # If you're running integration tests with S3, set this variable to be an
+    # s3 path that you have access to where test data can be written. If you're
+    # just running tests against the mock, this can be any s3 path. It should
+    # end with a '/'.
     self.TEST_DATA_PATH = 's3://random-data-sets/beam_tests/'
+
 
   def test_checksum(self):
 
