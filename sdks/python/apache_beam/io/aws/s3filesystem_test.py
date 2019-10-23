@@ -155,6 +155,16 @@ class S3FileSystemTest(unittest.TestCase):
     s3io_mock.open.assert_called_once_with(
         's3://bucket/from1', 'wb', mime_type='application/octet-stream')
 
+  def test_open(self):
+    # Prepare mocks.
+    s3io_mock = mock.MagicMock()
+    s3filesystem.s3io.S3IO = lambda: s3io_mock
+    # Issue file copy
+    _ = self.fs.open('s3://bucket/from1', 'application/octet-stream')
+
+    s3io_mock.open.assert_called_once_with(
+        's3://bucket/from1', 'rb', mime_type='application/octet-stream')
+
 
 if __name__ == '__main__':
   logging.getLogger().setLevel(logging.INFO)
