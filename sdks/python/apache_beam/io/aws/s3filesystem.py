@@ -225,7 +225,7 @@ class S3FileSystem(FileSystem):
     Raises:
       ``BeamIOError`` if path doesn't exist.
     """
-    raise NotImplementedError
+    return s3io.S3IO().last_updated(path)
 
   def checksum(self, path):
     """Fetch checksum metadata of a file on the
