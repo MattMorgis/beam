@@ -17,7 +17,6 @@
 """Tests for S3 client."""
 from __future__ import absolute_import
 
-import hashlib
 import os
 import logging
 import random
@@ -89,18 +88,14 @@ class TestS3IO(unittest.TestCase):
     # For integration tests or to test over to the wire
     # Initalize with no client and it will default to using Boto3
     # Uncomment the following line:
-    self.aws = s3io.S3IO()
+    # self.aws = s3io.S3IO()
 
     # TODO: document this
     self.TEST_DATA_PATH = 's3://random-data-sets/beam_tests/'
 
-  #def tearDown(self):
-  #  self.assertEqual(self.client.files, dict())
-
-
   def test_checksum(self):
 
-    file_name = self.TEST_DATA_PATH + '_checksum'
+    file_name = self.TEST_DATA_PATH + 'checksum'
     file_size = 1024
     file_ = self._insert_random_file(self.client, file_name, file_size)
 
@@ -280,8 +275,8 @@ class TestS3IO(unittest.TestCase):
     self.aws.delete_batch(all_files)
 
   def test_rename_batch_with_errors(self):
-    real_prefix = self.TEST_DATA_PATH + '_rename_batch_%s'
-    fake_prefix = 's3://fake-bucket-68ae4b0ef7b9/_rename_batch_%s'
+    real_prefix = self.TEST_DATA_PATH + 'rename_batch_%s'
+    fake_prefix = 's3://fake-bucket-68ae4b0ef7b9/rename_batch_%s'
     src_dest_pairs = [(prefix % 'src', prefix % 'dest')
                       for prefix in (real_prefix, fake_prefix)]
 
@@ -322,7 +317,7 @@ class TestS3IO(unittest.TestCase):
     self.assertTrue(file_name not in files)
 
   def test_delete_batch(self, *unused_args):
-    file_name_pattern = self.TEST_DATA_PATH + '/delete_batch/%d'
+    file_name_pattern = self.TEST_DATA_PATH + 'delete_batch/%d'
     file_size = 1024
     num_files = 5
 
@@ -471,6 +466,9 @@ class TestS3IO(unittest.TestCase):
           f.read(end - start + 1), contents[start:end + 1]
       )
       self.assertEqual(f.tell(), end + 1)
+    
+    # Clean up
+    self.aws.delete(file_name)
 
   def test_file_flush(self):
     file_name = self.TEST_DATA_PATH + 'flush_file'
@@ -489,6 +487,9 @@ class TestS3IO(unittest.TestCase):
     new_f_contents = new_f.read()
     self.assertEqual(
         new_f_contents, contents)
+
+    # Clean up
+    self.aws.delete(file_name)
 
   def test_file_iterator(self):
     file_name = self.TEST_DATA_PATH + 'iterate_file'
@@ -511,6 +512,9 @@ class TestS3IO(unittest.TestCase):
       read_lines += 1
 
     self.assertEqual(read_lines, line_count)
+
+    # Clean up
+    self.aws.delete(file_name)
 
   def test_file_read_line(self):
     file_name = self.TEST_DATA_PATH + 'read_line_file'
@@ -565,6 +569,9 @@ class TestS3IO(unittest.TestCase):
       f.seek(start)
       self.assertEqual(f.readline(), lines[line_index][chars_left:])
 
+    # Clean up
+    self.aws.delete(file_name)
+
   def test_file_close(self):
     file_name = self.TEST_DATA_PATH + 'close_file'
     file_size = 5 * 1024 * 1024 + 2000
@@ -581,6 +588,9 @@ class TestS3IO(unittest.TestCase):
     self.assertEqual(
         read_contents, contents)
 
+    # Clean up
+    self.aws.delete(file_name)
+
   def test_context_manager(self):
     # Test writing with a context manager.
     file_name = self.TEST_DATA_PATH + 'context_manager_file'
@@ -591,6 +601,9 @@ class TestS3IO(unittest.TestCase):
 
     with self.aws.open(file_name, 'r') as f:
       self.assertEqual(f.read(), contents)
+
+    # Clean up
+    self.aws.delete(file_name)
 
   def test_list_prefix(self):
 
@@ -626,6 +639,10 @@ class TestS3IO(unittest.TestCase):
       self.assertEqual(
           set(self.aws.list_prefix(file_pattern).items()),
           set(expected_file_names))
+
+    # Clean up
+    for (object_name, size) in objects: 
+      self.aws.delete(self.TEST_DATA_PATH + object_name)
 
 
 if __name__ == '__main__':
