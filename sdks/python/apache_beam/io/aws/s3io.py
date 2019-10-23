@@ -277,6 +277,21 @@ class S3IO(object):
     paths = self.list_prefix(root)
     return self.delete_batch(paths)
 
+  @retry.with_exponential_backoff(
+      retry_filter=retry.retry_on_server_errors_and_timeout_filter)
+  def size(self, path):
+    """Returns the size of a single S3 object.
+
+    This method does not perform glob expansion. Hence the given path must be
+    for a single S3 object.
+
+    Returns: size of the S3 object in bytes.
+    """
+    bucket, object_path = parse_s3_path(path)
+    request = messages.GetRequest(bucket, object_path)
+    item = self.client.get_object_metadata(request)
+    return item.size
+
   # We intentionally do not decorate this method with a retry, since the
   # underlying copy and delete operations are already idempotent operations
   # protected by retry decorators.

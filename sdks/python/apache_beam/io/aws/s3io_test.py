@@ -88,7 +88,15 @@ class TestS3IO(unittest.TestCase):
     # For integration tests or to test over to the wire
     # Initalize with no client and it will default to using Boto3
     # Uncomment the following line:
-    self.aws = s3io.S3IO()
+    # self.aws = s3io.S3IO()
+
+  def test_size(self):
+    file_name = 's3://random-data-sets/dummy_file'
+    file_size = 1234
+
+    self._insert_random_file(self.client, file_name, file_size)
+    self.assertTrue(self.aws.exists(file_name))
+    self.assertEqual(1234, self.aws.size(file_name))
 
   def test_checksum(self):
 
@@ -97,7 +105,7 @@ class TestS3IO(unittest.TestCase):
     file_ = self._insert_random_file(self.client, file_name, file_size)
 
     original_etag = self.aws.checksum(file_name)
-    
+
     self.aws.delete(file_name)
 
     with self.aws.open(file_name, 'w') as f:
