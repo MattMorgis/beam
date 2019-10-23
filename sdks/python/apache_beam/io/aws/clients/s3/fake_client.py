@@ -18,8 +18,6 @@
 from __future__ import absolute_import
 
 from apache_beam.io.aws.clients.s3 import messages
-import apache_beam.io.aws.s3io_test as s3io_test
-from apache_beam.io.aws.s3io import parse_s3_path
 
 
 

@@ -15,17 +15,35 @@ except ImportError:
 class ClientErrorTest(unittest.TestCase):
 
   def setUp(self):
-    self.client = fake_client.FakeS3Client()
-    # self.client = boto3_client.Client()
+
+    # These tests can be run locally against a mock S3 client, or as integration
+    # tests against the real S3 client.
+    self.USE_MOCK = False
+
+    # If you're running integration tests with S3, set this variable to be an
+    # s3 path that you have access to where test data can be written. If you're
+    # just running tests against the mock, this can be any s3 path. It should
+    # end with a '/'.
+    self.TEST_DATA_PATH = 's3://random-data-sets/beam_tests/'
+
+    self.test_bucket, self.test_path = s3io.parse_s3_path(self.TEST_DATA_PATH)
+
+    if self.USE_MOCK:
+      self.client = fake_client.FakeS3Client()
+      test_data_bucket, _ = s3io.parse_s3_path(self.TEST_DATA_PATH)
+      self.client.known_buckets.add(test_data_bucket)
+    else:
+      self.client = boto3_client.Client()
+
     self.aws = s3io.S3IO(self.client)
 
   def test_get_object_metadata(self):
 
-    # Test nonexistent bucket/object
-    bucket, object = 'random-data-sets', '_nonexistent_file_doesnt_exist'
-    request = messages.GetRequest(bucket, object)
-    self.assertRaises(messages.S3ClientError, 
-                      self.client.get_object_metadata, 
+    # Test nonexistent object
+    object = self.test_path + 'nonexistent_file_doesnt_exist'
+    request = messages.GetRequest(self.test_bucket, object)
+    self.assertRaises(messages.S3ClientError,
+                      self.client.get_object_metadata,
                       request)
 
     try:
@@ -36,9 +54,9 @@ class ClientErrorTest(unittest.TestCase):
 
   def test_get_range_nonexistent(self):
 
-    # Test nonexistent bucket/object
-    bucket, object = 'random-data-sets', '_nonexistent_file_doesnt_exist'
-    request = messages.GetRequest(bucket, object)
+    # Test nonexistent object
+    object = self.test_path + 'nonexistent_file_doesnt_exist'
+    request = messages.GetRequest(self.test_bucket, object)
     self.assertRaises(messages.S3ClientError, 
                       self.client.get_range, 
                       request, 0, 10)
@@ -51,7 +69,7 @@ class ClientErrorTest(unittest.TestCase):
 
   def test_get_range_bad_start_end(self):
 
-    file_name = 's3://random-data-sets/_get_range'
+    file_name = self.TEST_DATA_PATH + 'get_range'
     contents = os.urandom(1024)
 
     with self.aws.open(file_name, 'w') as f:
@@ -66,21 +84,25 @@ class ClientErrorTest(unittest.TestCase):
                                      20, 10)
     self.assertEqual(response, contents)
 
+    # Clean up
+    self.aws.delete(file_name)
+
+
   def test_upload_part_nonexistent_upload_id(self):
 
-    bucket, object = 'random-data-sets', '_upload_part'
+    object = self.test_path + 'upload_part'
     upload_id = 'not-an-id-12345'
     part_number = 1
     contents = os.urandom(1024)
 
-    request = messages.UploadPartRequest(bucket, 
-                                         object, 
-                                         upload_id, 
-                                         part_number, 
+    request = messages.UploadPartRequest(self.test_bucket,
+                                         object,
+                                         upload_id,
+                                         part_number,
                                          contents)
 
-    self.assertRaises(messages.S3ClientError, 
-                      self.client.upload_part, 
+    self.assertRaises(messages.S3ClientError,
+                      self.client.upload_part,
                       request)
 
     try:
@@ -92,11 +114,13 @@ class ClientErrorTest(unittest.TestCase):
 
   def test_copy_nonexistent(self):
 
-    bucket = 'random-data-sets'
-    src_key = '_not_a_real_file_does_not_exist'
-    dest_key = '_destination_file_location'
+    src_key = self.test_path + 'not_a_real_file_does_not_exist'
+    dest_key = self.test_path + 'destination_file_location'
 
-    request = messages.CopyRequest(bucket, src_key, bucket, dest_key)
+    request = messages.CopyRequest(self.test_bucket, 
+                                   src_key, 
+                                   self.test_bucket, 
+                                   dest_key)
 
     with self.assertRaises(messages.S3ClientError) as e:
       self.client.copy(request)
@@ -107,21 +131,21 @@ class ClientErrorTest(unittest.TestCase):
 
   def test_upload_part_bad_number(self):
 
-    bucket, object = 'random-data-sets', '_upload_part'
+    object = self.test_path + 'upload_part'
     contents = os.urandom(1024)
 
-    request = messages.UploadRequest(bucket, object, None)
+    request = messages.UploadRequest(self.test_bucket, object, None)
     response = self.client.create_multipart_upload(request)
     upload_id = response.upload_id
 
     part_number = 0.5
-    request = messages.UploadPartRequest(bucket, 
+    request = messages.UploadPartRequest(self.test_bucket, 
                                          object, 
                                          upload_id, 
                                          part_number, 
                                          contents)
 
-    self.assertRaises(messages.S3ClientError, 
+    self.assertRaises(messages.S3ClientError,
                       self.client.upload_part, 
                       request)
 
@@ -133,14 +157,14 @@ class ClientErrorTest(unittest.TestCase):
 
   def test_complete_multipart_upload_too_small(self):
 
-    bucket, object = 'random-data-sets', '_upload_part'
-    request = messages.UploadRequest(bucket, object, None)
+    object = self.test_path + 'upload_part'
+    request = messages.UploadRequest(self.test_bucket, object, None)
     response = self.client.create_multipart_upload(request)
     upload_id = response.upload_id
 
     part_number = 1
     contents_1 = os.urandom(1024)
-    request_1 = messages.UploadPartRequest(bucket,
+    request_1 = messages.UploadPartRequest(self.test_bucket,
                                            object,
                                            upload_id,
                                            part_number,
@@ -150,7 +174,7 @@ class ClientErrorTest(unittest.TestCase):
 
     part_number = 2
     contents_2 = os.urandom(1024)
-    request_2 = messages.UploadPartRequest(bucket,
+    request_2 = messages.UploadPartRequest(self.test_bucket,
                                            object,
                                            upload_id,
                                            part_number,
@@ -161,9 +185,9 @@ class ClientErrorTest(unittest.TestCase):
         {'PartNumber': 1, 'ETag': response_1.etag},
         {'PartNumber': 2, 'ETag': response_2.etag}
     ]
-    complete_request = messages.CompleteMultipartUploadRequest(bucket, 
-                                                               object, 
-                                                               upload_id, 
+    complete_request = messages.CompleteMultipartUploadRequest(self.test_bucket,
+                                                               object,
+                                                               upload_id,
                                                                parts)
 
     try:
@@ -172,18 +196,16 @@ class ClientErrorTest(unittest.TestCase):
       self.assertIsInstance(e, messages.S3ClientError)
       self.assertEqual(e.code, 400)
 
-    response
-
   def test_complete_multipart_upload_too_many(self):
 
-    bucket, object = 'random-data-sets', '_upload_part'
-    request = messages.UploadRequest(bucket, object, None)
+    object = self.test_path + 'upload_part'
+    request = messages.UploadRequest(self.test_bucket, object, None)
     response = self.client.create_multipart_upload(request)
     upload_id = response.upload_id
 
     part_number = 1
     contents_1 = os.urandom(5 * 1024)
-    request_1 = messages.UploadPartRequest(bucket,
+    request_1 = messages.UploadPartRequest(self.test_bucket,
                                            object,
                                            upload_id,
                                            part_number,
@@ -193,7 +215,7 @@ class ClientErrorTest(unittest.TestCase):
 
     part_number = 2
     contents_2 = os.urandom(1024)
-    request_2 = messages.UploadPartRequest(bucket,
+    request_2 = messages.UploadPartRequest(self.test_bucket,
                                            object,
                                            upload_id,
                                            part_number,
@@ -205,7 +227,7 @@ class ClientErrorTest(unittest.TestCase):
         {'PartNumber': 2, 'ETag': response_2.etag},
         {'PartNumber': 3, 'ETag': 'fake-etag'},
     ]
-    complete_request = messages.CompleteMultipartUploadRequest(bucket,
+    complete_request = messages.CompleteMultipartUploadRequest(self.test_bucket,
                                                                object,
                                                                upload_id,
                                                                parts)
@@ -215,4 +237,3 @@ class ClientErrorTest(unittest.TestCase):
     except Exception as e:
       self.assertIsInstance(e, messages.S3ClientError)
       self.assertEqual(e.code, 400)
-
