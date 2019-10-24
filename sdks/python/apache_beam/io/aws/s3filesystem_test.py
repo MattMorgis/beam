@@ -165,6 +165,21 @@ class S3FileSystemTest(unittest.TestCase):
     s3io_mock.open.assert_called_once_with(
         's3://bucket/from1', 'rb', mime_type='application/octet-stream')
 
+  def test_delete(self):
+    # Prepare mocks.
+    s3io_mock = mock.MagicMock()
+    s3filesystem.s3io.S3IO = lambda: s3io_mock
+    s3io_mock.size.return_value = 0
+    files = [
+        'gs://bucket/from1',
+        'gs://bucket/from2',
+        'gs://bucket/from3',
+    ]
+
+    # Issue batch delete.
+    self.fs.delete(files)
+    s3io_mock.delete_batch.assert_called()
+
 
 if __name__ == '__main__':
   logging.getLogger().setLevel(logging.INFO)

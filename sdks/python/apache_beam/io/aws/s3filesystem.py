@@ -260,10 +260,10 @@ class S3FileSystem(FileSystem):
     results = {}
 
     for directory in directories:
-      dir_result = dict(s3io.S3IO.delete_tree(directory))
+      dir_result = dict(s3io.S3IO().delete_tree(directory))
       results.update(dir_result)
 
-    not_directory_results = dict(s3io.S3IO.delete_batch(not_dirs))
+    not_directory_results = dict(s3io.S3IO().delete_batch(not_directories))
     results.update(not_directory_results)
 
     exceptions = {path: error for (path, error) in results if error is not None}
