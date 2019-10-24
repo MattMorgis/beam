@@ -295,7 +295,11 @@ class S3IO(object):
     """
     assert root.endswith('/')
 
-    paths = self.list_prefix(root)
+    try:
+      paths = self.list_prefix(root)
+    except messages.S3ClientError as e:
+      return [(root, e)]
+
     return self.delete_batch(paths)
 
   @retry.with_exponential_backoff(

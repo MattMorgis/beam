@@ -266,7 +266,8 @@ class S3FileSystem(FileSystem):
     not_directory_results = dict(s3io.S3IO().delete_batch(not_directories))
     results.update(not_directory_results)
 
-    exceptions = {path: error for (path, error) in results if error is not None}
+    exceptions = {path: error for (path, error) in results.items()
+                 if error is not None}
     if exceptions:
       raise BeamIOError("Delete operation failed", exceptions)
 
