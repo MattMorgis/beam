@@ -110,7 +110,12 @@ class Client(object):
     if request.continuation_token is not None:
       kwargs['ContinuationToken'] = request.continuation_token
 
-    boto_response = self.client.list_objects_v2(**kwargs)
+    try:
+      boto_response = self.client.list_objects_v2(**kwargs)
+    except Exception as e:
+      message = e.response['Error']['Message']
+      code = e.response['ResponseMetadata']['HTTPStatusCode']
+      raise messages.S3ClientError(message, code)
 
     if boto_response['KeyCount'] == 0:
       return messages.ListResponse([])

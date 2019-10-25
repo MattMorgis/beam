@@ -27,6 +27,7 @@ import mock
 from apache_beam.io.filesystem import BeamIOError
 from apache_beam.io.filesystem import FileMetadata
 from apache_beam.options.pipeline_options import PipelineOptions
+from apache_beam.io.aws.clients.s3 import messages
 
 # Protect against environments where boto3 library is not available.
 # pylint: disable=wrong-import-order, wrong-import-position
@@ -164,6 +165,47 @@ class S3FileSystemTest(unittest.TestCase):
 
     s3io_mock.open.assert_called_once_with(
         's3://bucket/from1', 'rb', mime_type='application/octet-stream')
+
+  def test_delete(self):
+    # Prepare mocks.
+    s3io_mock = mock.MagicMock()
+    s3filesystem.s3io.S3IO = lambda: s3io_mock
+    s3io_mock.size.return_value = 0
+    files = [
+        's3://bucket/from1',
+        's3://bucket/from2',
+        's3://bucket/from3',
+    ]
+
+    # Issue batch delete.
+    self.fs.delete(files)
+    s3io_mock.delete_batch.assert_called()
+
+  def test_delete_error(self):
+    # Prepare mocks.
+    s3io_mock = mock.MagicMock()
+    s3filesystem.s3io.S3IO = lambda: s3io_mock
+
+    problematic_directory = 's3://nonexistent-bucket/tree/'
+    exception = messages.S3ClientError('Not found', 404)
+
+    s3io_mock.delete_tree.return_value = [(problematic_directory, exception)]
+    s3io_mock.size.return_value = 0
+    files = [
+        problematic_directory,
+        's3://bucket/object1',
+        's3://bucket/object2',
+    ]
+    expected_results = {problematic_directory: exception}
+
+    # Issue batch delete.
+    with self.assertRaisesRegex(BeamIOError,
+                                r'^Delete operation failed') as error:
+      self.fs.delete(files)
+    self.assertEqual(error.exception.exception_details, expected_results)
+    s3io_mock.delete_batch.assert_called()
+    s3io_mock.delete_tree.assert_called()
+
 
 
 if __name__ == '__main__':
