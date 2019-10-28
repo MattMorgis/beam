@@ -216,7 +216,7 @@ class TestS3IO(unittest.TestCase):
     all_files = set().union(*[set(pair) for pair in src_dest_pairs])
     self.aws.delete_batch(all_files)
 
-  def test_copytree(self):
+  def test_copy_tree(self):
     src_dir_name = self.TEST_DATA_PATH + 'source/'
     dest_dir_name = self.TEST_DATA_PATH + 'dest/'
     file_size = 1024
@@ -230,7 +230,7 @@ class TestS3IO(unittest.TestCase):
       self.assertFalse(
           dest_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
 
-    results = self.aws.copytree(src_dir_name, dest_dir_name)
+    results = self.aws.copy_tree(src_dir_name, dest_dir_name)
 
     for i, path in enumerate(paths):
       src_file_name = src_dir_name + path

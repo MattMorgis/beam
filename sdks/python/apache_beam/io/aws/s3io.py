@@ -195,7 +195,7 @@ class S3IO(object):
   # We intentionally do not decorate this method with a retry, since the
   # underlying copy and delete operations are already idempotent operations
   # protected by retry decorators.
-  def copytree(self, src, dest):
+  def copy_tree(self, src, dest):
     """Renames the given S3 "directory" recursively from src to dest.
 
     Args:
