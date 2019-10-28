@@ -204,9 +204,18 @@ class S3IO(object):
     """
     assert src.endswith('/')
     assert dest.endswith('/')
+
+    results = []
     for entry in self.list_prefix(src):
       rel_path = entry[len(src):]
-      self.copy(entry, dest + rel_path)
+      try:
+        self.copy(entry, dest + rel_path)
+        results.append((entry, dest + rel_path, None))
+      except messages.S3ClientError as e:
+        results.append((entry, dest_path, e))
+    return results
+
+
 
   @retry.with_exponential_backoff(
       retry_filter=retry.retry_on_server_errors_and_timeout_filter)
@@ -295,11 +304,7 @@ class S3IO(object):
     """
     assert root.endswith('/')
 
-    try:
-      paths = self.list_prefix(root)
-    except messages.S3ClientError as e:
-      return [(root, e)]
-
+    paths = self.list_prefix(root)
     return self.delete_batch(paths)
 
   @retry.with_exponential_backoff(

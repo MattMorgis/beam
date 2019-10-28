@@ -90,7 +90,7 @@ class TestS3IO(unittest.TestCase):
 
     # These tests can be run locally against a mock S3 client, or as integration
     # tests against the real S3 client.
-    self.USE_MOCK = False
+    self.USE_MOCK = True
 
     # If you're running integration tests with S3, set this variable to be an
     # s3 path that you have access to where test data can be written. If you're
@@ -230,15 +230,17 @@ class TestS3IO(unittest.TestCase):
       self.assertFalse(
           dest_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
 
-    self.aws.copytree(src_dir_name, dest_dir_name)
+    results = self.aws.copytree(src_dir_name, dest_dir_name)
 
-    for path in paths:
+    for i, path in enumerate(paths):
       src_file_name = src_dir_name + path
       dest_file_name = dest_dir_name + path
       self.assertTrue(
           src_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
       self.assertTrue(
           dest_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
+
+      self.assertEqual(results[i], (src_file_name, dest_file_name, None))
 
     # Clean up
     for path in paths:
@@ -416,13 +418,6 @@ class TestS3IO(unittest.TestCase):
     # Check that the files have been deleted
     for path in paths:
       self.assertFalse(self.aws.exists(path))
-
-  def test_delete_tree_with_errors(self):
-    fake_dir = 's3://fake-bucket-68ae4b0ef7b9/fake-dir/'
-    result = self.aws.delete_tree(fake_dir)
-    self.assertEqual(result[0][0], fake_dir)
-    self.assertIsInstance(result[0][1], messages.S3ClientError)
-
 
   def test_exists(self):
     file_name = self.TEST_DATA_PATH + 'exists'
