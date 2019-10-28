@@ -205,16 +205,22 @@ class TestS3IO(unittest.TestCase):
       self.assertTrue(self.aws.exists(from_name_pattern % i))
 
     # Execute batch copy.
-    self.aws.copy_batch(src_dest_pairs)
+    result = self.aws.copy_batch(src_dest_pairs)
 
     # Check files copied properly.
     for i in range(num_files):
       self.assertTrue(self.aws.exists(from_name_pattern % i))
       self.assertTrue(self.aws.exists(to_name_pattern % i))
 
+    # Check results
+    for i, (src, dest, exception) in enumerate(result):
+      self.assertEqual(src_dest_pairs[i], (src, dest))
+      self.assertEqual(exception, None)
+
     # Clean up
     all_files = set().union(*[set(pair) for pair in src_dest_pairs])
     self.aws.delete_batch(all_files)
+
 
   def test_copy_tree(self):
     src_dir_name = self.TEST_DATA_PATH + 'source/'

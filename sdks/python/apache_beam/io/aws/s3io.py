@@ -180,15 +180,31 @@ class S3IO(object):
     results = []
 
     for src_path, dest_path in src_dest_pairs:
-      src_bucket, src_key = parse_s3_path(src_path)
-      dest_bucket, dest_key = parse_s3_path(dest_path)
-      request = messages.CopyRequest(src_bucket, src_key, dest_bucket, dest_key)
 
-      try:
-        self.client.copy(request)
-        results.append((src_path, dest_path, None))
-      except messages.S3ClientError as e:
-        results.append((src_path, dest_path, e))
+      # Copy a directory with self.copy_tree
+      if src_path.endswith('/') and dest_path.endswith('/'):
+        results += self.copy_tree(src_path, dest_path)
+
+      # Copy individual files with self.copy
+      elif not src_path.endswith('/') and not dest_path.endswith('/'):
+        src_bucket, src_key = parse_s3_path(src_path)
+        dest_bucket, dest_key = parse_s3_path(dest_path)
+        request = messages.CopyRequest(src_bucket, src_key, dest_bucket, dest_key)
+
+        try:
+          self.client.copy(request)
+          results.append((src_path, dest_path, None))
+        except messages.S3ClientError as e:
+          results.append((src_path, dest_path, e))
+      
+      # Mismatched paths (one directory, one non-directory) get an error result
+      else:
+        err = messages.S3ClientError(
+            """Can't copy mismatched paths (one directory, one non-directory):
+            %s, %s""" % (src_path, dest_path),
+            400)
+        results.append((src_path, dest_path, err))
+
 
     return results
 
