@@ -17,14 +17,12 @@
 
 from __future__ import absolute_import
 
-from apache_beam.io.filesystem import BeamIOError
 from apache_beam.io.aws.clients.s3 import messages
 
 try:
   # pylint: disable=wrong-import-order, wrong-import-position
   # pylint: disable=ungrouped-imports
   import boto3
-  from botocore.exceptions import ClientError, NoCredentialsError, ParamValidationError
 
 except ImportError:
   raise ImportError('Missing `boto3` requirement')
@@ -51,16 +49,10 @@ class Client(object):
 
     try:
       boto_response = self.client.head_object(**kwargs)
-    except ClientError as e:
-      s3error = messages.S3ClientError(e.response['Error']['Message'])
-      s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
-      s3error.message = e.response['Error']['Message']
-      raise s3error
-    except NoCredentialsError as e:
-      s3error = messages.S3ClientError(e.response['Error']['Message'])
-      s3error.code = 400
-      s3error.message = e.response['Error']['Message']
-      raise s3error
+    except Exception as e:
+      message = e.response['Error']['Message']
+      code = e.response['ResponseMetadata']['HTTPStatusCode']
+      raise messages.S3ClientError(message, code)
 
     item = messages.Item(boto_response['ETag'],
                          request.object,
@@ -83,16 +75,10 @@ class Client(object):
                                              Range='bytes={}-{}'.format(
                                                  start,
                                                  end - 1))
-    except ClientError as e:
-      s3error = messages.S3ClientError(e.response['Error']['Message'])
-      s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
-      s3error.message = e.response['Error']['Message']
-      raise s3error
-    except NoCredentialsError as e:
-      s3error = messages.S3ClientError(e.response['Error']['Message'])
-      s3error.code = 400
-      s3error.message = e.response['Error']['Message']
-      raise s3error
+    except Exception as e:
+      message = e.response['Error']['Message']
+      code = e.response['ResponseMetadata']['HTTPStatusCode']
+      raise messages.S3ClientError(message, code)
 
     return boto_response['Body'].read() # A bytes object
 
@@ -146,16 +132,10 @@ class Client(object):
       boto_response = self.client.create_multipart_upload(Bucket=request.bucket,
                                                           Key=request.object)
       response = messages.UploadResponse(boto_response['UploadId'])
-    except ClientError as e:
-      s3error = messages.S3ClientError(e.response['Error']['Message'])
-      s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
-      s3error.message = e.response['Error']['Message']
-      raise s3error
-    except NoCredentialsError as e:
-      s3error = messages.S3ClientError(e.response['Error']['Message'])
-      s3error.code = 400
-      s3error.message = e.response['Error']['Message']
-      raise s3error
+    except Exception as e:
+      message = e.response['Error']['Message']
+      code = e.response['ResponseMetadata']['HTTPStatusCode']
+      raise messages.S3ClientError(message, code)
     return response
 
   def upload_part(self, request):
@@ -175,18 +155,10 @@ class Client(object):
       response = messages.UploadPartResponse(boto_response['ETag'],
                                              request.part_number)
       return response
-    except ClientError as e:
-      s3error = messages.S3ClientError(e.response['Error']['Message'])
-      s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
-      s3error.message = e.response['Error']['Message']
-      raise s3error
-    except ParamValidationError as e:
-      raise messages.S3ClientError(e.kwargs['report'], 400)
-    except NoCredentialsError as e:
-      s3error = messages.S3ClientError(e.response['Error']['Message'])
-      s3error.code = 400
-      s3error.message = e.response['Error']['Message']
-      raise s3error
+    except Exception as e:
+      message = e.response['Error']['Message']
+      code = e.response['ResponseMetadata']['HTTPStatusCode']
+      raise messages.S3ClientError(message, code)
 
   def complete_multipart_upload(self, request):
     r"""Completes a multipart upload to S3
@@ -202,11 +174,10 @@ class Client(object):
                                             Key=request.object,
                                             UploadId=request.upload_id,
                                             MultipartUpload=parts)
-    except ClientError as e:
-      s3error = messages.S3ClientError(e.response['Error']['Message'])
-      s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
-      s3error.message = e.response['Error']['Message']
-      raise s3error
+    except Exception as e:
+      message = e.response['Error']['Message']
+      code = e.response['ResponseMetadata']['HTTPStatusCode']
+      raise messages.S3ClientError(message, code)
 
   def delete(self, request):
     r"""Deletes given object from bucket
@@ -219,11 +190,10 @@ class Client(object):
       self.client.delete_object(Bucket=request.bucket,
                                 Key=request.object)
 
-    except ClientError as e:
-      s3error = messages.S3ClientError(e.response['Error']['Message'])
-      s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
-      s3error.message = e.response['Error']['Message']
-      raise s3error
+    except Exception as e:
+      message = e.response['Error']['Message']
+      code = e.response['ResponseMetadata']['HTTPStatusCode']
+      raise messages.S3ClientError(message, code)
 
   def delete_batch(self, request):
 
@@ -258,7 +228,6 @@ class Client(object):
       }
       self.client.copy(copy_src, request.dest_bucket, request.dest_key)
     except Exception as e:
-      s3error = messages.S3ClientError(e.response['Error']['Message'])
-      s3error.code = int(e.response['ResponseMetadata']['HTTPStatusCode'])
-      s3error.message = e.response['Error']['Message']
-      raise s3error
+      message = e.response['Error']['Message']
+      code = e.response['ResponseMetadata']['HTTPStatusCode']
+      raise messages.S3ClientError(message, code)
