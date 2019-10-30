@@ -381,6 +381,22 @@ class TestS3IO(unittest.TestCase):
     # Clean up
     self.aws.delete(real_prefix % 'dest')
 
+  def test_rename_files_with_errors_directory(self):
+
+    # Make file
+    dir_name = self.TEST_DATA_PATH + 'rename_dir/'
+    file_name = dir_name + 'file'
+    self._insert_random_file(self.client, file_name, 1024)
+
+    self.assertTrue(self.aws.exists(file_name))
+
+    with self.assertRaises(ValueError):
+      self.aws.rename_files([(file_name, self.TEST_DATA_PATH + 'dir_dest/')])
+
+    # Clean up
+    self.aws.delete(file_name)
+
+
   def test_delete_paths(self):
     # Make files
     prefix = self.TEST_DATA_PATH + 'delete_paths/'
