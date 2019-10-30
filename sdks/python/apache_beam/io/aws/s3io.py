@@ -183,7 +183,10 @@ class S3IO(object):
 
       # Copy a directory with self.copy_tree
       if src_path.endswith('/') and dest_path.endswith('/'):
-        results += self.copy_tree(src_path, dest_path)
+        try:
+          results += self.copy_tree(src_path, dest_path)
+        except messages.S3ClientError as err:
+          results.append((src_path, dest_path, err))
 
       # Copy individual files with self.copy
       elif not src_path.endswith('/') and not dest_path.endswith('/'):
@@ -200,11 +203,10 @@ class S3IO(object):
       # Mismatched paths (one directory, one non-directory) get an error result
       else:
         err = messages.S3ClientError(
-            """Can't copy mismatched paths (one directory, one non-directory):
-            %s, %s""" % (src_path, dest_path),
+            "Can't copy mismatched paths (one directory, one non-directory):" +
+            ' %s, %s' % (src_path, dest_path),
             400)
         results.append((src_path, dest_path, err))
-
 
     return results
 

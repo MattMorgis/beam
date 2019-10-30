@@ -166,6 +166,19 @@ class S3FileSystemTest(unittest.TestCase):
     s3io_mock.open.assert_called_once_with(
         's3://bucket/from1', 'rb', mime_type='application/octet-stream')
 
+  def test_copy_file(self):
+    # Prepare mocks.
+    s3io_mock = mock.MagicMock()
+    s3filesystem.s3io.S3IO = lambda: s3io_mock
+
+    sources = ['s3://bucket/from1', 's3://bucket/from2']
+    destinations = ['s3://bucket/to1', 's3://bucket/to2']
+
+    # Issue file copy
+    self.fs.copy(sources, destinations)
+
+    s3io_mock.copy_batch.assert_called_once()
+
   def test_delete(self):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()

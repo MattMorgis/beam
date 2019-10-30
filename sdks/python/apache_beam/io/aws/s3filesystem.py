@@ -172,9 +172,8 @@ class S3FileSystem(FileSystem):
     Raises:
       ``BeamIOError`` if any of the copy operations fail
     """
-    err_msg = ("source_file_names and destination_file_names should "
-               "be equal in length")
-    raise NotImplementedError
+    return s3io.S3IO().copy_batch(zip(source_file_names,
+                                      destination_file_names))
 
   def rename(self, source_file_names, destination_file_names):
     """Rename the files at the source list to the destination list.

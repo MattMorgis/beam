@@ -221,6 +221,47 @@ class TestS3IO(unittest.TestCase):
     all_files = set().union(*[set(pair) for pair in src_dest_pairs])
     self.aws.delete_batch(all_files)
 
+  def test_copy_batch_error(self):
+    n_real_files = 3
+
+    # Create some files
+    from_path = self.TEST_DATA_PATH + 'copy_batch/%d'
+    files = [from_path + '%d' % i for i in range(n_real_files)]
+    to_path = self.TEST_DATA_PATH + 'destination/'
+    destinations = [to_path + '%d' % i for i in range(n_real_files)]
+    for file_ in files: self._insert_random_file(self.client, file_, 1024)
+
+    # Add nonexistent files to the sources and destinations
+    sources = files + [
+        from_path + 'X',
+        from_path + 'fake_directory_1/',
+        from_path + 'fake_directory_2/'
+    ]
+    destinations += [
+        to_path + 'X',
+        to_path + 'fake_directory_1/',
+        to_path + 'fake_directory_2'
+    ]
+
+    result = self.aws.copy_batch(zip(sources, destinations))
+    self.assertEqual(len(result), len(sources))
+
+    for src, dest, err in result[:n_real_files]:
+      self.assertTrue(err is None)
+
+    for src, dest, err in result[n_real_files:]:
+      self.assertIsInstance(err, messages.S3ClientError)
+
+    self.assertEqual(result[-3][2].code, 404)
+    self.assertEqual(result[-2][2].code, 404)
+    self.assertEqual(result[-1][2].code, 400)
+
+    # Clean up
+    self.aws.delete_batch(files)
+
+    True
+
+
 
   def test_copy_tree(self):
     src_dir_name = self.TEST_DATA_PATH + 'source/'
