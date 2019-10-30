@@ -188,7 +188,7 @@ class S3FileSystemTest(unittest.TestCase):
     destinations = ['s3://bucket/to1', 's3://bucket/to2']
 
     # Issue file copy
-    with self.assertRaises(BeamIOError) as err:
+    with self.assertRaises(BeamIOError):
       self.fs.copy(sources, destinations)
 
   def test_delete(self):
