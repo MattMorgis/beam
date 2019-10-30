@@ -177,7 +177,7 @@ class S3FileSystemTest(unittest.TestCase):
     # Issue file copy
     self.fs.copy(sources, destinations)
 
-    s3io_mock.copy_batch.assert_called_once()
+    s3io_mock.copy_paths.assert_called_once()
 
   def test_copy_file_error(self):
     # Prepare mocks.
@@ -230,7 +230,6 @@ class S3FileSystemTest(unittest.TestCase):
     self.assertEqual(error.exception.exception_details, expected_results)
     s3io_mock.delete_batch.assert_called()
     s3io_mock.delete_tree.assert_called()
-
 
 
 if __name__ == '__main__':

@@ -174,7 +174,7 @@ class S3FileSystem(FileSystem):
     """
     if not len(source_file_names) == len(destination_file_names):
       raise BeamIOError('Unequal to copy number of sources and destinations')
-    return s3io.S3IO().copy_batch(zip(source_file_names,
+    return s3io.S3IO().copy_paths(zip(source_file_names,
                                       destination_file_names))
 
   def rename(self, source_file_names, destination_file_names):

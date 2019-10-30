@@ -165,7 +165,7 @@ class S3IO(object):
     request = messages.CopyRequest(src_bucket, src_key, dest_bucket, dest_key)
     self.client.copy(request)
 
-  def copy_batch(self, src_dest_pairs):
+  def copy_paths(self, src_dest_pairs):
     """Copies the given S3 objects from src to dest.
 
     Args:
@@ -232,8 +232,6 @@ class S3IO(object):
       except messages.S3ClientError as e:
         results.append((entry, dest_path, e))
     return results
-
-
 
   @retry.with_exponential_backoff(
       retry_filter=retry.retry_on_server_errors_and_timeout_filter)
@@ -308,7 +306,6 @@ class S3IO(object):
         results[(bucket, key)] = e
 
     return results
-
 
   def delete_tree(self, root):
     """Deletes all objects under the given S3 root path.
@@ -400,7 +397,7 @@ class S3IO(object):
     """
     if not src_dest_pairs: return []
 
-    copy_results = self.copy_batch(src_dest_pairs)
+    copy_results = self.copy_paths(src_dest_pairs)
     paths_to_delete = [src for (src, _, err) in copy_results if err is None]
     delete_results = self.delete_batch(paths_to_delete)
 

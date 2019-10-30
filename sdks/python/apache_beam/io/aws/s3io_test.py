@@ -176,7 +176,7 @@ class TestS3IO(unittest.TestCase):
       self.aws.copy(self.TEST_DATA_PATH + 'non-existent',
                     self.TEST_DATA_PATH + 'non-existent-destination')
 
-  def test_copy_batch(self):
+  def test_copy_paths(self):
     from_name_pattern = self.TEST_DATA_PATH + 'copy_me_%d'
     to_name_pattern = self.TEST_DATA_PATH + 'destination_%d'
     file_size = 1024
@@ -185,7 +185,7 @@ class TestS3IO(unittest.TestCase):
     src_dest_pairs = [(from_name_pattern % i, to_name_pattern % i)
                       for i in range(num_files)]
 
-    result = self.aws.copy_batch(src_dest_pairs)
+    result = self.aws.copy_paths(src_dest_pairs)
 
     self.assertTrue(result)
     for i, (src, dest, exception) in enumerate(result):
@@ -205,7 +205,7 @@ class TestS3IO(unittest.TestCase):
       self.assertTrue(self.aws.exists(from_name_pattern % i))
 
     # Execute batch copy.
-    result = self.aws.copy_batch(src_dest_pairs)
+    result = self.aws.copy_paths(src_dest_pairs)
 
     # Check files copied properly.
     for i in range(num_files):
@@ -221,11 +221,11 @@ class TestS3IO(unittest.TestCase):
     all_files = set().union(*[set(pair) for pair in src_dest_pairs])
     self.aws.delete_batch(all_files)
 
-  def test_copy_batch_error(self):
+  def test_copy_paths_error(self):
     n_real_files = 3
 
     # Create some files
-    from_path = self.TEST_DATA_PATH + 'copy_batch/%d'
+    from_path = self.TEST_DATA_PATH + 'copy_paths/%d'
     files = [from_path + '%d' % i for i in range(n_real_files)]
     to_path = self.TEST_DATA_PATH + 'destination/'
     destinations = [to_path + '%d' % i for i in range(n_real_files)]
@@ -243,7 +243,7 @@ class TestS3IO(unittest.TestCase):
         to_path + 'fake_directory_2'
     ]
 
-    result = self.aws.copy_batch(zip(sources, destinations))
+    result = self.aws.copy_paths(zip(sources, destinations))
     self.assertEqual(len(result), len(sources))
 
     for src, dest, err in result[:n_real_files]:
@@ -260,8 +260,6 @@ class TestS3IO(unittest.TestCase):
     self.aws.delete_batch(files)
 
     True
-
-
 
   def test_copy_tree(self):
     src_dir_name = self.TEST_DATA_PATH + 'source/'
@@ -525,7 +523,6 @@ class TestS3IO(unittest.TestCase):
 
     # Clean up
     self.aws.delete(file_name)
-
 
   def test_file_random_seek(self):
     file_name = self.TEST_DATA_PATH + 'write_seek_file'
