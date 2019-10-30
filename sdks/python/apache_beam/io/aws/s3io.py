@@ -52,11 +52,6 @@ def parse_s3_path(s3_path, object_optional=False):
   return match.group(1), match.group(2)
 
 
-class S3IOError(IOError, retry.PermanentException):
-  """S3 IO error that should not be retried."""
-  pass
-
-
 class S3IO(object):
   """S3 I/O client."""
 
@@ -199,7 +194,7 @@ class S3IO(object):
           results.append((src_path, dest_path, None))
         except messages.S3ClientError as e:
           results.append((src_path, dest_path, e))
-      
+
       # Mismatched paths (one directory, one non-directory) get an error result
       else:
         err = messages.S3ClientError(
