@@ -179,6 +179,18 @@ class S3FileSystemTest(unittest.TestCase):
 
     s3io_mock.copy_batch.assert_called_once()
 
+  def test_copy_file_error(self):
+    # Prepare mocks.
+    s3io_mock = mock.MagicMock()
+    s3filesystem.s3io.S3IO = lambda: s3io_mock
+
+    sources = ['s3://bucket/from1', 's3://bucket/from2', 's3://bucket/from3']
+    destinations = ['s3://bucket/to1', 's3://bucket/to2']
+
+    # Issue file copy
+    with self.assertRaises(BeamIOError) as err:
+      self.fs.copy(sources, destinations)
+
   def test_delete(self):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()

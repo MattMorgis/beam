@@ -172,6 +172,8 @@ class S3FileSystem(FileSystem):
     Raises:
       ``BeamIOError`` if any of the copy operations fail
     """
+    if not len(source_file_names) == len(destination_file_names):
+      raise BeamIOError('Unequal to copy number of sources and destinations')
     return s3io.S3IO().copy_batch(zip(source_file_names,
                                       destination_file_names))
 
