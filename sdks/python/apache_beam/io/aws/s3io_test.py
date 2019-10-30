@@ -381,6 +381,26 @@ class TestS3IO(unittest.TestCase):
     # Clean up
     self.aws.delete(real_prefix % 'dest')
 
+  def test_delete_paths(self):
+    # Make files
+    prefix = self.TEST_DATA_PATH + 'delete_paths/'
+    file_names = [prefix + 'a', prefix + 'b/c']
+    for file_name in file_names:
+      self._insert_random_file(self.client, file_name, 1024)
+
+    self.assertTrue(self.aws.exists(file_names[0]))
+    self.assertTrue(self.aws.exists(file_names[1]))
+
+
+    # Delete paths
+    paths = [prefix + 'a', prefix + 'b/']
+    self.aws.delete_paths(paths)
+
+    self.assertFalse(self.aws.exists(file_names[0]))
+    self.assertFalse(self.aws.exists(file_names[1]))
+
+
+
   def test_delete(self):
     file_name = self.TEST_DATA_PATH + 'delete_file'
     file_size = 1024
