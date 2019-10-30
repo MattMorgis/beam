@@ -253,22 +253,8 @@ class S3FileSystem(FileSystem):
       paths: list of paths that give the file objects to be deleted
     """
 
-    directories, not_directories = [], []
-    for path in paths:
-      if path.endswith('/'): directories.append(path)
-      else: not_directories.append(path)
-
-    results = {}
-
-    for directory in directories:
-      dir_result = dict(s3io.S3IO().delete_tree(directory))
-      results.update(dir_result)
-
-    not_directory_results = dict(s3io.S3IO().delete_batch(not_directories))
-    results.update(not_directory_results)
-
-    exceptions = {path: error for (path, error) in results.items()
-                 if error is not None}
+    results = s3io.S3IO().delete_paths(paths)
+    exceptions = {path: error for (path, error) in results
+                  if error is not None}
     if exceptions:
       raise BeamIOError("Delete operation failed", exceptions)
-

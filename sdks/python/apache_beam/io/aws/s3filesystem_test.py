@@ -204,7 +204,7 @@ class S3FileSystemTest(unittest.TestCase):
 
     # Issue batch delete.
     self.fs.delete(files)
-    s3io_mock.delete_batch.assert_called()
+    s3io_mock.delete_paths.assert_called()
 
   def test_delete_error(self):
     # Prepare mocks.
@@ -214,7 +214,11 @@ class S3FileSystemTest(unittest.TestCase):
     problematic_directory = 's3://nonexistent-bucket/tree/'
     exception = messages.S3ClientError('Not found', 404)
 
-    s3io_mock.delete_tree.return_value = [(problematic_directory, exception)]
+    s3io_mock.delete_paths.return_value = [
+        (problematic_directory, exception),
+        ('s3://bucket/object1', None),
+        ('s3://bucket/object2', None)
+      ]
     s3io_mock.size.return_value = 0
     files = [
         problematic_directory,
@@ -228,8 +232,7 @@ class S3FileSystemTest(unittest.TestCase):
                                 r'^Delete operation failed') as error:
       self.fs.delete(files)
     self.assertEqual(error.exception.exception_details, expected_results)
-    s3io_mock.delete_batch.assert_called()
-    s3io_mock.delete_tree.assert_called()
+    s3io_mock.delete_paths.assert_called()
 
 
 if __name__ == '__main__':

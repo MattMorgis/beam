@@ -249,7 +249,24 @@ class S3IO(object):
                       3)
         raise e
 
-  def delete_batch(self, paths, max_batch_size=1000):
+  def delete_paths(self, paths):
+    directories, not_directories = [], []
+    for path in paths:
+      if path.endswith('/'): directories.append(path)
+      else: not_directories.append(path)
+
+    results = {}
+
+    for directory in directories:
+      dir_result = dict(self.delete_tree(directory))
+      results.update(dir_result)
+
+    not_directory_results = dict(self.delete_files(not_directories))
+    results.update(not_directory_results)
+
+    return results
+
+  def delete_files(self, paths, max_batch_size=1000):
     """Deletes the objects at the given S3 paths.
 
     Args:
@@ -320,7 +337,7 @@ class S3IO(object):
     assert root.endswith('/')
 
     paths = self.list_prefix(root)
-    return self.delete_batch(paths)
+    return self.delete_files(paths)
 
   @retry.with_exponential_backoff(
       retry_filter=retry.retry_on_server_errors_and_timeout_filter)
@@ -385,7 +402,7 @@ class S3IO(object):
         # We re-raise all other exceptions
         raise
 
-  def rename_batch(self, src_dest_pairs):
+  def rename_files(self, src_dest_pairs):
     """Renames the given S3 objects from src to dest.
 
     Args:
@@ -397,9 +414,14 @@ class S3IO(object):
     """
     if not src_dest_pairs: return []
 
+    # TODO: Throw value error if path has directory
+    for src, dest in src_dest_pairs:
+      if src.endswith('/') or dest.endswith('/'):
+        raise ValueError('Cannot rename a directory')
+
     copy_results = self.copy_paths(src_dest_pairs)
     paths_to_delete = [src for (src, _, err) in copy_results if err is None]
-    delete_results = self.delete_batch(paths_to_delete)
+    delete_results = self.delete_files(paths_to_delete)
 
     delete_results_dict = {src: err for (src, err) in delete_results}
     rename_results = []

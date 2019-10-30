@@ -169,7 +169,7 @@ class TestS3IO(unittest.TestCase):
                     self.aws.list_prefix(self.TEST_DATA_PATH))
 
     # Clean up
-    self.aws.delete_batch([src_file_name, dest_file_name])
+    self.aws.delete_files([src_file_name, dest_file_name])
 
     # Test copy of non-existent files.
     with self.assertRaisesRegex(messages.S3ClientError, r'Not Found'):
@@ -219,7 +219,7 @@ class TestS3IO(unittest.TestCase):
 
     # Clean up
     all_files = set().union(*[set(pair) for pair in src_dest_pairs])
-    self.aws.delete_batch(all_files)
+    self.aws.delete_files(all_files)
 
   def test_copy_paths_error(self):
     n_real_files = 3
@@ -257,7 +257,7 @@ class TestS3IO(unittest.TestCase):
     self.assertEqual(result[-1][2].code, 400)
 
     # Clean up
-    self.aws.delete_batch(files)
+    self.aws.delete_files(files)
 
     True
 
@@ -291,7 +291,7 @@ class TestS3IO(unittest.TestCase):
     for path in paths:
       src_file_name = src_dir_name + path
       dest_file_name = dest_dir_name + path
-      self.aws.delete_batch([src_file_name, dest_file_name])
+      self.aws.delete_files([src_file_name, dest_file_name])
 
   def test_rename(self):
     src_file_name = self.TEST_DATA_PATH + 'source'
@@ -313,9 +313,9 @@ class TestS3IO(unittest.TestCase):
         dest_file_name in self.aws.list_prefix(self.TEST_DATA_PATH))
 
     # Clean up
-    self.aws.delete_batch([src_file_name, dest_file_name])
+    self.aws.delete_files([src_file_name, dest_file_name])
 
-  def test_rename_batch(self):
+  def test_rename_files(self):
     from_name_pattern = self.TEST_DATA_PATH + 'to_rename_%d'
     to_name_pattern = self.TEST_DATA_PATH + 'been_renamed_%d'
     file_size = 1024
@@ -324,7 +324,7 @@ class TestS3IO(unittest.TestCase):
     src_dest_pairs = [(from_name_pattern % i, to_name_pattern % i)
                       for i in range(num_files)]
 
-    result = self.aws.rename_batch(src_dest_pairs)
+    result = self.aws.rename_files(src_dest_pairs)
 
     self.assertTrue(result)
     for i, (src, dest, exception) in enumerate(result):
@@ -345,7 +345,7 @@ class TestS3IO(unittest.TestCase):
       self.assertFalse(self.aws.exists(to_name_pattern % i))
 
     # Execute batch rename.
-    self.aws.rename_batch(src_dest_pairs)
+    self.aws.rename_files(src_dest_pairs)
 
     # Check files were renamed properly.
     for i in range(num_files):
@@ -354,9 +354,9 @@ class TestS3IO(unittest.TestCase):
 
     # Clean up
     all_files = set().union(*[set(pair) for pair in src_dest_pairs])
-    self.aws.delete_batch(all_files)
+    self.aws.delete_files(all_files)
 
-  def test_rename_batch_with_errors(self):
+  def test_rename_files_with_errors(self):
     real_prefix = self.TEST_DATA_PATH + 'rename_batch_%s'
     fake_prefix = 's3://fake-bucket-68ae4b0ef7b9/rename_batch_%s'
     src_dest_pairs = [(prefix % 'src', prefix % 'dest')
@@ -366,7 +366,7 @@ class TestS3IO(unittest.TestCase):
     self._insert_random_file(self.client, real_prefix % 'src', 1024)
 
     # Execute batch rename
-    result = self.aws.rename_batch(src_dest_pairs)
+    result = self.aws.rename_files(src_dest_pairs)
 
     # First is the file in the real bucket, which shouldn't throw an error
     self.assertEqual(result[0][0], src_dest_pairs[0][0])
@@ -397,13 +397,13 @@ class TestS3IO(unittest.TestCase):
     self.aws.delete(file_name)
     self.assertFalse(self.aws.exists(file_name))
 
-  def test_delete_batch(self, *unused_args):
+  def test_delete_files(self, *unused_args):
     file_name_pattern = self.TEST_DATA_PATH + 'delete_batch/%d'
     file_size = 1024
     num_files = 5
 
     # Test deletion of non-existent files.
-    result = self.aws.delete_batch(
+    result = self.aws.delete_files(
         [file_name_pattern % i for i in range(num_files)])
     self.assertTrue(result)
     for i, (file_name, exception) in enumerate(result):
@@ -420,18 +420,18 @@ class TestS3IO(unittest.TestCase):
       self.assertTrue(self.aws.exists(file_name_pattern % i))
 
     # Execute batch delete.
-    self.aws.delete_batch([file_name_pattern % i for i in range(num_files)])
+    self.aws.delete_files([file_name_pattern % i for i in range(num_files)])
 
     # Check files deleted properly.
     for i in range(num_files):
       self.assertFalse(self.aws.exists(file_name_pattern % i))
 
-  def test_delete_batch_with_errors(self, *unused_args):
+  def test_delete_files_with_errors(self, *unused_args):
     real_file = self.TEST_DATA_PATH + 'delete_batch/file'
     fake_file = 's3://fake-bucket-68ae4b0ef7b9/delete_batch/file'
     filenames = [real_file, fake_file]
 
-    result = self.aws.delete_batch(filenames)
+    result = self.aws.delete_files(filenames)
 
     # First is the file in the real bucket, which shouldn't throw an error
     self.assertEqual(result[0][0], filenames[0])
