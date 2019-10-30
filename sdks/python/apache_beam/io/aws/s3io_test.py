@@ -397,8 +397,7 @@ class TestS3IO(unittest.TestCase):
 
     # Delete the file and check that it was deleted
     self.aws.delete(file_name)
-    files = self.aws.list_prefix(self.TEST_DATA_PATH)
-    self.assertTrue(file_name not in files)
+    self.assertFalse(self.aws.exists(file_name))
 
   def test_delete_batch(self, *unused_args):
     file_name_pattern = self.TEST_DATA_PATH + 'delete_batch/%d'
