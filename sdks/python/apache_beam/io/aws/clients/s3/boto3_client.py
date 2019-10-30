@@ -104,7 +104,9 @@ class Client(object):
       raise messages.S3ClientError(message, code)
 
     if boto_response['KeyCount'] == 0:
-      return messages.ListResponse([])
+      message = 'Tried to list nonexistent S3 path: s3://%s/%s' % (
+          request.bucket, request.prefix)
+      raise messages.S3ClientError(message, 404)
 
     items = [messages.Item(etag=content['ETag'],
                            key=content['Key'],

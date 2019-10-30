@@ -97,6 +97,11 @@ class FakeS3Client(object):
         file_object = self.get_file(file_bucket, file_name).get_metadata()
         matching_files.append(file_object)
 
+    if not matching_files:
+      message = 'Tried to list nonexistent S3 path: s3://%s/%s' % (
+          bucket, prefix)
+      raise messages.S3ClientError(message, 404)
+
     # Handle pagination.
     items_per_page = 5
     if not request.continuation_token:

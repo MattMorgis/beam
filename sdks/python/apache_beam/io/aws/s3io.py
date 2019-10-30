@@ -52,11 +52,6 @@ def parse_s3_path(s3_path, object_optional=False):
   return match.group(1), match.group(2)
 
 
-class S3IOError(IOError, retry.PermanentException):
-  """S3 IO error that should not be retried."""
-  pass
-
-
 class S3IO(object):
   """S3 I/O client."""
 
@@ -165,7 +160,7 @@ class S3IO(object):
     request = messages.CopyRequest(src_bucket, src_key, dest_bucket, dest_key)
     self.client.copy(request)
 
-  def copy_batch(self, src_dest_pairs):
+  def copy_paths(self, src_dest_pairs):
     """Copies the given S3 objects from src to dest.
 
     Args:
@@ -180,22 +175,40 @@ class S3IO(object):
     results = []
 
     for src_path, dest_path in src_dest_pairs:
-      src_bucket, src_key = parse_s3_path(src_path)
-      dest_bucket, dest_key = parse_s3_path(dest_path)
-      request = messages.CopyRequest(src_bucket, src_key, dest_bucket, dest_key)
 
-      try:
-        self.client.copy(request)
-        results.append((src_path, dest_path, None))
-      except messages.S3ClientError as e:
-        results.append((src_path, dest_path, e))
+      # Copy a directory with self.copy_tree
+      if src_path.endswith('/') and dest_path.endswith('/'):
+        try:
+          results += self.copy_tree(src_path, dest_path)
+        except messages.S3ClientError as err:
+          results.append((src_path, dest_path, err))
+
+      # Copy individual files with self.copy
+      elif not src_path.endswith('/') and not dest_path.endswith('/'):
+        src_bucket, src_key = parse_s3_path(src_path)
+        dest_bucket, dest_key = parse_s3_path(dest_path)
+        request = messages.CopyRequest(src_bucket, src_key, dest_bucket, dest_key)
+
+        try:
+          self.client.copy(request)
+          results.append((src_path, dest_path, None))
+        except messages.S3ClientError as e:
+          results.append((src_path, dest_path, e))
+
+      # Mismatched paths (one directory, one non-directory) get an error result
+      else:
+        err = messages.S3ClientError(
+            "Can't copy mismatched paths (one directory, one non-directory):" +
+            ' %s, %s' % (src_path, dest_path),
+            400)
+        results.append((src_path, dest_path, err))
 
     return results
 
   # We intentionally do not decorate this method with a retry, since the
   # underlying copy and delete operations are already idempotent operations
   # protected by retry decorators.
-  def copytree(self, src, dest):
+  def copy_tree(self, src, dest):
     """Renames the given S3 "directory" recursively from src to dest.
 
     Args:
@@ -204,9 +217,16 @@ class S3IO(object):
     """
     assert src.endswith('/')
     assert dest.endswith('/')
+
+    results = []
     for entry in self.list_prefix(src):
       rel_path = entry[len(src):]
-      self.copy(entry, dest + rel_path)
+      try:
+        self.copy(entry, dest + rel_path)
+        results.append((entry, dest + rel_path, None))
+      except messages.S3ClientError as e:
+        results.append((entry, dest_path, e))
+    return results
 
   @retry.with_exponential_backoff(
       retry_filter=retry.retry_on_server_errors_and_timeout_filter)
@@ -224,7 +244,24 @@ class S3IO(object):
                       3)
         raise e
 
-  def delete_batch(self, paths, max_batch_size=1000):
+  def delete_paths(self, paths):
+    directories, not_directories = [], []
+    for path in paths:
+      if path.endswith('/'): directories.append(path)
+      else: not_directories.append(path)
+
+    results = {}
+
+    for directory in directories:
+      dir_result = dict(self.delete_tree(directory))
+      results.update(dir_result)
+
+    not_directory_results = dict(self.delete_files(not_directories))
+    results.update(not_directory_results)
+
+    return results
+
+  def delete_files(self, paths, max_batch_size=1000):
     """Deletes the objects at the given S3 paths.
 
     Args:
@@ -282,7 +319,6 @@ class S3IO(object):
 
     return results
 
-
   def delete_tree(self, root):
     """Deletes all objects under the given S3 root path.
 
@@ -295,12 +331,8 @@ class S3IO(object):
     """
     assert root.endswith('/')
 
-    try:
-      paths = self.list_prefix(root)
-    except messages.S3ClientError as e:
-      return [(root, e)]
-
-    return self.delete_batch(paths)
+    paths = self.list_prefix(root)
+    return self.delete_files(paths)
 
   @retry.with_exponential_backoff(
       retry_filter=retry.retry_on_server_errors_and_timeout_filter)
@@ -365,7 +397,7 @@ class S3IO(object):
         # We re-raise all other exceptions
         raise
 
-  def rename_batch(self, src_dest_pairs):
+  def rename_files(self, src_dest_pairs):
     """Renames the given S3 objects from src to dest.
 
     Args:
@@ -377,9 +409,14 @@ class S3IO(object):
     """
     if not src_dest_pairs: return []
 
-    copy_results = self.copy_batch(src_dest_pairs)
+    # TODO: Throw value error if path has directory
+    for src, dest in src_dest_pairs:
+      if src.endswith('/') or dest.endswith('/'):
+        raise ValueError('Cannot rename a directory')
+
+    copy_results = self.copy_paths(src_dest_pairs)
     paths_to_delete = [src for (src, _, err) in copy_results if err is None]
-    delete_results = self.delete_batch(paths_to_delete)
+    delete_results = self.delete_files(paths_to_delete)
 
     delete_results_dict = {src: err for (src, err) in delete_results}
     rename_results = []

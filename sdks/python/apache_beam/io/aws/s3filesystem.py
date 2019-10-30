@@ -172,9 +172,10 @@ class S3FileSystem(FileSystem):
     Raises:
       ``BeamIOError`` if any of the copy operations fail
     """
-    err_msg = ("source_file_names and destination_file_names should "
-               "be equal in length")
-    raise NotImplementedError
+    if not len(source_file_names) == len(destination_file_names):
+      raise BeamIOError('Unable to copy unequal number of sources and destinations')
+    return s3io.S3IO().copy_paths(zip(source_file_names,
+                                      destination_file_names))
 
   def rename(self, source_file_names, destination_file_names):
     """Rename the files at the source list to the destination list.
@@ -187,9 +188,13 @@ class S3FileSystem(FileSystem):
     Raises:
       ``BeamIOError`` if any of the rename operations fail
     """
-    err_msg = ("source_file_names and destination_file_names should "
-               "be equal in length")
-    raise NotImplementedError
+    if not len(source_file_names) == len(destination_file_names):
+      raise BeamIOError('Unable to rename unequal number of sources and destinations')
+    results = s3io.S3IO().rename_files(paths)
+    exceptions = {path: error for (path, error) in results
+                  if error is not None}
+    if exceptions:
+      raise BeamIOError("Delete operation failed", exceptions)
 
   def exists(self, path):
     """Check if the provided path exists on the FileSystem.
@@ -199,7 +204,10 @@ class S3FileSystem(FileSystem):
 
     Returns: boolean flag indicating if path exists
     """
-    return s3io.S3IO().exists(path)
+    try:
+      return s3io.S3IO().exists(path)
+    except Exception as e:  # pylint: disable=broad-except
+      raise BeamIOError("exists() operation failed", {path: e})
 
   def size(self, path):
     """Get size of path on the FileSystem.
@@ -212,7 +220,10 @@ class S3FileSystem(FileSystem):
     Raises:
       ``BeamIOError`` if path doesn't exist.
     """
-    return s3io.S3IO().size(path)
+    try:
+      return s3io.S3IO().size(path)
+    except Exception as e:  # pylint: disable=broad-except
+      raise BeamIOError("size() operation failed", {path: e})
 
   def last_updated(self, path):
     """Get UNIX Epoch time in seconds on the FileSystem.
@@ -225,7 +236,10 @@ class S3FileSystem(FileSystem):
     Raises:
       ``BeamIOError`` if path doesn't exist.
     """
-    return s3io.S3IO().last_updated(path)
+    try:
+      return s3io.S3IO().last_updated(path)
+    except Exception as e:  # pylint: disable=broad-except
+      raise BeamIOError("last_updated operation failed", {path: e})
 
   def checksum(self, path):
     """Fetch checksum metadata of a file on the
@@ -251,23 +265,8 @@ class S3FileSystem(FileSystem):
     Args:
       paths: list of paths that give the file objects to be deleted
     """
-
-    directories, not_directories = [], []
-    for path in paths:
-      if path.endswith('/'): directories.append(path)
-      else: not_directories.append(path)
-
-    results = {}
-
-    for directory in directories:
-      dir_result = dict(s3io.S3IO().delete_tree(directory))
-      results.update(dir_result)
-
-    not_directory_results = dict(s3io.S3IO().delete_batch(not_directories))
-    results.update(not_directory_results)
-
-    exceptions = {path: error for (path, error) in results.items()
-                 if error is not None}
+    results = s3io.S3IO().delete_paths(paths)
+    exceptions = {path: error for (path, error) in results
+                  if error is not None}
     if exceptions:
       raise BeamIOError("Delete operation failed", exceptions)
-
