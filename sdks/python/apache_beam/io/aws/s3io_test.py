@@ -108,6 +108,10 @@ class TestS3IO(unittest.TestCase):
       self.aws = s3io.S3IO()
       self.client = self.aws.client
 
+  def tearDown(self):
+
+    self.assertEqual(self.client.files, {})
+
   def test_size(self):
     file_name = self.TEST_DATA_PATH + 'dummy_file'
     file_size = 1234
@@ -225,7 +229,7 @@ class TestS3IO(unittest.TestCase):
     n_real_files = 3
 
     # Create some files
-    from_path = self.TEST_DATA_PATH + 'copy_paths/%d'
+    from_path = self.TEST_DATA_PATH + 'copy_paths/'
     files = [from_path + '%d' % i for i in range(n_real_files)]
     to_path = self.TEST_DATA_PATH + 'destination/'
     destinations = [to_path + '%d' % i for i in range(n_real_files)]
@@ -258,8 +262,8 @@ class TestS3IO(unittest.TestCase):
 
     # Clean up
     self.aws.delete_files(files)
+    self.aws.delete_files(destinations)
 
-    True
 
   def test_copy_tree(self):
     src_dir_name = self.TEST_DATA_PATH + 'source/'
