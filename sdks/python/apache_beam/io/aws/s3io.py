@@ -146,7 +146,7 @@ class S3IO(object):
   @retry.with_exponential_backoff(
       retry_filter=retry.retry_on_server_errors_and_timeout_filter)
   def copy(self, src, dest):
-    """Copies the given S3 object from src to dest.
+    """Copies a single S3 file object from src to dest.
 
     Args:
       src: S3 file path pattern in the form s3://<bucket>/<name>.
@@ -160,8 +160,12 @@ class S3IO(object):
     request = messages.CopyRequest(src_bucket, src_key, dest_bucket, dest_key)
     self.client.copy(request)
 
+  # We intentionally do not decorate this method with a retry, since the
+  # underlying copy and delete operations are already idempotent operations
+  # protected by retry decorators.
   def copy_paths(self, src_dest_pairs):
-    """Copies the given S3 objects from src to dest.
+    """Copies the given S3 objects from src to dest. This can handle directory
+    or file paths.
 
     Args:
       src_dest_pairs: list of (src, dest) tuples of s3://<bucket>/<name> file
@@ -187,7 +191,10 @@ class S3IO(object):
       elif not src_path.endswith('/') and not dest_path.endswith('/'):
         src_bucket, src_key = parse_s3_path(src_path)
         dest_bucket, dest_key = parse_s3_path(dest_path)
-        request = messages.CopyRequest(src_bucket, src_key, dest_bucket, dest_key)
+        request = messages.CopyRequest(src_bucket,
+                                       src_key,
+                                       dest_bucket,
+                                       dest_key)
 
         try:
           self.client.copy(request)
@@ -209,11 +216,17 @@ class S3IO(object):
   # underlying copy and delete operations are already idempotent operations
   # protected by retry decorators.
   def copy_tree(self, src, dest):
-    """Renames the given S3 "directory" recursively from src to dest.
+    """Renames the given S3 directory and it's contents recursively
+    from src to dest.
 
     Args:
       src: S3 file path pattern in the form s3://<bucket>/<name>/.
       dest: S3 file path pattern in the form s3://<bucket>/<name>/.
+
+    Returns:
+      List of tuples of (src, dest, exception) in the same order as the
+      src_dest_pairs argument, where exception is None if the operation
+      succeeded or the relevant exception if the operation failed.
     """
     assert src.endswith('/')
     assert dest.endswith('/')
@@ -231,6 +244,17 @@ class S3IO(object):
   @retry.with_exponential_backoff(
       retry_filter=retry.retry_on_server_errors_and_timeout_filter)
   def delete(self, path):
+    """Deletes a single S3 file object from src to dest.
+
+    Args:
+      src: S3 file path pattern in the form s3://<bucket>/<name>/.
+      dest: S3 file path pattern in the form s3://<bucket>/<name>/.
+
+    Returns:
+      List of tuples of (src, dest, exception) in the same order as the
+      src_dest_pairs argument, where exception is None if the operation
+      succeeded or the relevant exception if the operation failed.
+    """
     bucket, object_path = parse_s3_path(path)
     request = messages.DeleteRequest(bucket, object_path)
 
@@ -244,7 +268,22 @@ class S3IO(object):
                       3)
         raise e
 
+  # We intentionally do not decorate this method with a retry, since the
+  # underlying copy and delete operations are already idempotent operations
+  # protected by retry decorators.
   def delete_paths(self, paths):
+    """Deletes the given S3 objects from src to dest. This can handle directory
+    or file paths.
+
+    Args:
+      src: S3 file path pattern in the form s3://<bucket>/<name>/.
+      dest: S3 file path pattern in the form s3://<bucket>/<name>/.
+
+    Returns:
+      List of tuples of (src, dest, exception) in the same order as the
+      src_dest_pairs argument, where exception is None if the operation
+      succeeded or the relevant exception if the operation failed.
+    """
     directories, not_directories = [], []
     for path in paths:
       if path.endswith('/'): directories.append(path)
@@ -261,8 +300,11 @@ class S3IO(object):
 
     return results
 
+  # We intentionally do not decorate this method with a retry, since the
+  # underlying copy and delete operations are already idempotent operations
+  # protected by retry decorators.
   def delete_files(self, paths, max_batch_size=1000):
-    """Deletes the objects at the given S3 paths.
+    """Deletes the given S3 file object from src to dest.
 
     Args:
       paths: List of S3 file paths in the form s3://<bucket>/<name>
@@ -292,8 +334,11 @@ class S3IO(object):
 
     return final_results
 
+  @retry.with_exponential_backoff(
+      retry_filter=retry.retry_on_server_errors_and_timeout_filter)
   def _delete_minibatch(self, bucket, keys):
-    """Deletes the objects at the given S3 paths.
+    """A helper method. Boto3 allows batch deletions
+    for files within the same bucket.
 
     Args:
       bucket: String bucket name
@@ -319,8 +364,11 @@ class S3IO(object):
 
     return results
 
+  # We intentionally do not decorate this method with a retry, since the
+  # underlying copy and delete operations are already idempotent operations
+  # protected by retry decorators.
   def delete_tree(self, root):
-    """Deletes all objects under the given S3 root path.
+    """Deletes all objects under the given S3 directory.
 
     Args:
       path: S3 root path in the form s3://<bucket>/<name>/ (ending with a "/")
