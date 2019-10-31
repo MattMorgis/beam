@@ -109,7 +109,7 @@ class TestS3IO(unittest.TestCase):
       self.client = self.aws.client
 
   def test_size(self):
-    file_name = 's3://random-data-sets/dummy_file'
+    file_name = self.TEST_DATA_PATH + 'dummy_file'
     file_size = 1234
 
     self._insert_random_file(self.client, file_name, file_size)
@@ -117,7 +117,7 @@ class TestS3IO(unittest.TestCase):
     self.assertEqual(1234, self.aws.size(file_name))
 
   def test_last_updated(self):
-    file_name = 's3://random-data-sets/dummy_file'
+    file_name = self.TEST_DATA_PATH + 'dummy_file'
     file_size = 1234
 
     self._insert_random_file(self.client, file_name, file_size)
