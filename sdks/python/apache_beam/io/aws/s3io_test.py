@@ -108,10 +108,6 @@ class TestS3IO(unittest.TestCase):
       self.aws = s3io.S3IO()
       self.client = self.aws.client
 
-  def tearDown(self):
-
-    self.assertEqual(self.client.files, {})
-
   def test_size(self):
     file_name = self.TEST_DATA_PATH + 'dummy_file'
     file_size = 1234
@@ -119,6 +115,9 @@ class TestS3IO(unittest.TestCase):
     self._insert_random_file(self.client, file_name, file_size)
     self.assertTrue(self.aws.exists(file_name))
     self.assertEqual(1234, self.aws.size(file_name))
+
+    # Clean up
+    self.aws.delete(file_name)
 
   def test_last_updated(self):
     file_name = self.TEST_DATA_PATH + 'dummy_file'
@@ -131,6 +130,9 @@ class TestS3IO(unittest.TestCase):
     low_bound, high_bound = time.time() - tolerance, time.time() + tolerance
     result = self.aws.last_updated(file_name)
     self.assertTrue(low_bound <= result <= high_bound)
+
+    # Clean up
+    self.aws.delete(file_name)
 
   def test_checksum(self):
 
