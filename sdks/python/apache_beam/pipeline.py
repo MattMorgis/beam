@@ -154,10 +154,9 @@ class Pipeline(object):
       raise ValueError(
           'Pipeline has validations errors: \n' + '\n'.join(errors))
 
-    # set default experiments for portable runner
+    # set default experiments for portable runners
     # (needs to occur prior to pipeline construction)
-    portable_runners = ['PortableRunner', 'FlinkRunner']
-    if self._options.view_as(StandardOptions).runner in portable_runners:
+    if runner.is_fnapi_compatible():
       experiments = (self._options.view_as(DebugOptions).experiments or [])
       if not 'beam_fn_api' in experiments:
         experiments.append('beam_fn_api')
@@ -486,8 +485,7 @@ class Pipeline(object):
                            label or transform.label]).lstrip('/')
     if full_label in self.applied_labels:
       raise RuntimeError(
-          'Transform "%s" does not have a stable unique label. '
-          'This will prevent updating of pipelines. '
+          'A transform with label "%s" already exists in the pipeline. '
           'To apply a transform with a specified label write '
           'pvalue | "label" >> transform'
           % full_label)
@@ -545,13 +543,15 @@ class Pipeline(object):
     return pvalueish_result
 
   def _infer_result_type(self, transform, inputs, result_pcollection):
-    # TODO(robertwb): Multi-input, multi-output inference.
+    # TODO(robertwb): Multi-input inference.
     type_options = self._options.view_as(TypeOptions)
-    if (type_options is not None and type_options.pipeline_type_check
-        and isinstance(result_pcollection, pvalue.PCollection)
+    if type_options is None or not type_options.pipeline_type_check:
+      return
+    if (isinstance(result_pcollection, pvalue.PCollection)
         and (not result_pcollection.element_type
              # TODO(robertwb): Ideally we'd do intersection here.
              or result_pcollection.element_type == typehints.Any)):
+      # Single-input, single-output inference.
       input_element_type = (
           inputs[0].element_type
           if len(inputs) == 1
@@ -571,6 +571,13 @@ class Pipeline(object):
       else:
         result_pcollection.element_type = transform.infer_output_type(
             input_element_type)
+    elif isinstance(result_pcollection, pvalue.DoOutputsTuple):
+      # Single-input, multi-output inference.
+      # TODO(BEAM-4132): Add support for tagged type hints.
+      #   https://github.com/apache/beam/pull/9810#discussion_r338765251
+      for pcoll in result_pcollection:
+        if pcoll.element_type is None:
+          pcoll.element_type = typehints.Any
 
   def __reduce__(self):
     # Some transforms contain a reference to their enclosing pipeline,
@@ -882,7 +889,7 @@ class AppliedPTransform(object):
                 for tag, pc in sorted(self.named_inputs().items())},
         outputs={str(tag): context.pcollections.get_id(out)
                  for tag, out in sorted(self.named_outputs().items())},
-        # TODO(BEAM-115): display_data
+        # TODO(BEAM-366): Add display_data.
         display_data=None)
 
   @staticmethod

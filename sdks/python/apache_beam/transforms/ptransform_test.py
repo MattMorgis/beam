@@ -32,6 +32,8 @@ from builtins import range
 from builtins import zip
 from functools import reduce
 
+# patches unittest.TestCase to be python3 compatible
+import future.tests.base  # pylint: disable=unused-import
 import hamcrest as hc
 from nose.plugins.attrib import attr
 
@@ -190,6 +192,13 @@ class PTransformTest(unittest.TestCase):
     r2 = pcoll | 'B' >> beam.FlatMap(lambda x: [x + 2]).with_outputs(main='m')
     assert_that(r1.m, equal_to([2, 3, 4]), label='r1')
     assert_that(r2.m, equal_to([3, 4, 5]), label='r2')
+    pipeline.run()
+
+  @attr('ValidatesRunner')
+  def test_impulse(self):
+    pipeline = TestPipeline()
+    result = pipeline | beam.Impulse() | beam.Map(lambda _: 0)
+    assert_that(result, equal_to([0]))
     pipeline.run()
 
   # TODO(BEAM-3544): Disable this test in streaming temporarily.
@@ -2128,8 +2137,8 @@ class TestPTransformFn(TypeHintTestCase):
       return pcoll | beam.ParDo(lambda x: [x]).with_output_types(str)
 
     p = TestPipeline()
-    with self.assertRaisesRegexp(beam.typehints.TypeCheckError,
-                                 r'expected.*int.*got.*str'):
+    with self.assertRaisesRegex(beam.typehints.TypeCheckError,
+                                r'expected.*int.*got.*str'):
       _ = (p
            | beam.Create([1, 2])
            | MyTransform().with_output_types(int))

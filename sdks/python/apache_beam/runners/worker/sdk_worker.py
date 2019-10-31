@@ -46,6 +46,11 @@ from apache_beam.runners.worker.channel_factory import GRPCChannelFactory
 from apache_beam.runners.worker.statecache import StateCache
 from apache_beam.runners.worker.worker_id_interceptor import WorkerIdInterceptor
 
+# This SDK harness will (by default), log a "lull" in processing if it sees no
+# transitions in over 5 minutes.
+# 5 minutes * 60 seconds * 1020 millis * 1000 micros * 1000 nanoseconds
+DEFAULT_LOG_LULL_TIMEOUT_NS = 5 * 60 * 1000 * 1000 * 1000
+
 
 class SdkHarness(object):
   REQUEST_METHOD_PREFIX = '_request_'
@@ -62,6 +67,7 @@ class SdkHarness(object):
     self._worker_count = worker_count
     self._worker_index = 0
     self._worker_id = worker_id
+    self._state_cache = StateCache(state_cache_size)
     if credentials is None:
       logging.info('Creating insecure control channel for %s.', control_address)
       self._control_channel = GRPCChannelFactory.insecure_channel(
@@ -77,7 +83,7 @@ class SdkHarness(object):
         self._control_channel, WorkerIdInterceptor(self._worker_id))
     self._data_channel_factory = data_plane.GrpcClientDataChannelFactory(
         credentials, self._worker_id)
-    self._state_handler_factory = GrpcStateHandlerFactory(state_cache_size,
+    self._state_handler_factory = GrpcStateHandlerFactory(self._state_cache,
                                                           credentials)
     self._profiler_factory = profiler_factory
     self._fns = {}
@@ -121,6 +127,8 @@ class SdkHarness(object):
       # centralized function list shared among all the workers.
       self.workers.put(
           SdkWorker(self._bundle_processor_cache,
+                    state_cache_metrics_fn=
+                    self._state_cache.get_monitoring_infos,
                     profiler_factory=self._profiler_factory))
 
     def get_responses():
@@ -174,17 +182,7 @@ class SdkHarness(object):
     self._responses.put(response)
 
   def _request_register(self, request):
-
-    def task():
-      for process_bundle_descriptor in getattr(
-          request, request.WhichOneof('request')).process_bundle_descriptor:
-        self._fns[process_bundle_descriptor.id] = process_bundle_descriptor
-
-      return beam_fn_api_pb2.InstructionResponse(
-          instruction_id=request.instruction_id,
-          register=beam_fn_api_pb2.RegisterResponse())
-
-    self._execute(task, request)
+    self._request_execute(request)
 
   def _request_process_bundle(self, request):
 
@@ -233,6 +231,9 @@ class SdkHarness(object):
     self._progress_thread_pool.submit(task)
 
   def _request_finalize_bundle(self, request):
+    self._request_execute(request)
+
+  def _request_execute(self, request):
 
     def task():
       # Get one available worker.
@@ -265,8 +266,8 @@ class SdkHarness(object):
           if request_time:
             scheduling_delay = current_time - request_time
             if scheduling_delay > SdkHarness.SCHEDULING_DELAY_THRESHOLD_SEC:
-              logging.warn('Unable to schedule instruction %s for %s',
-                           instruction_id, scheduling_delay)
+              logging.warning('Unable to schedule instruction %s for %s',
+                              instruction_id, scheduling_delay)
 
 
 class BundleProcessorCache(object):
@@ -338,10 +339,16 @@ class BundleProcessorCache(object):
 
 class SdkWorker(object):
 
-  def __init__(self, bundle_processor_cache,
-               profiler_factory=None):
+  def __init__(self,
+               bundle_processor_cache,
+               state_cache_metrics_fn=list,
+               profiler_factory=None,
+               log_lull_timeout_ns=None):
     self.bundle_processor_cache = bundle_processor_cache
+    self.state_cache_metrics_fn = state_cache_metrics_fn
     self.profiler_factory = profiler_factory
+    self.log_lull_timeout_ns = (log_lull_timeout_ns
+                                or DEFAULT_LOG_LULL_TIMEOUT_NS)
 
   def do_instruction(self, request):
     request_type = request.WhichOneof('request')
@@ -375,12 +382,14 @@ class SdkWorker(object):
         with self.maybe_profile(instruction_id):
           delayed_applications, requests_finalization = (
               bundle_processor.process_bundle(instruction_id))
+          monitoring_infos = bundle_processor.monitoring_infos()
+          monitoring_infos.extend(self.state_cache_metrics_fn())
           response = beam_fn_api_pb2.InstructionResponse(
               instruction_id=instruction_id,
               process_bundle=beam_fn_api_pb2.ProcessBundleResponse(
                   residual_roots=delayed_applications,
                   metrics=bundle_processor.metrics(),
-                  monitoring_infos=bundle_processor.monitoring_infos(),
+                  monitoring_infos=monitoring_infos,
                   requires_finalization=requests_finalization))
       # Don't release here if finalize is needed.
       if not requests_finalization:
@@ -403,10 +412,35 @@ class SdkWorker(object):
           instruction_id=instruction_id,
           error='Instruction not running: %s' % instruction_id)
 
+  def _log_lull_in_bundle_processor(self, processor):
+    state_sampler = processor.state_sampler
+    sampler_info = state_sampler.get_info()
+    if (sampler_info
+        and sampler_info.time_since_transition
+        and sampler_info.time_since_transition > self.log_lull_timeout_ns):
+      step_name = sampler_info.state_name.step_name
+      state_name = sampler_info.state_name.name
+      state_lull_log = (
+          'There has been a processing lull of over %.2f seconds in state %s'
+          % (sampler_info.time_since_transition / 1e9, state_name))
+      step_name_log = (' in step %s ' % step_name) if step_name else ''
+
+      exec_thread = getattr(sampler_info, 'tracked_thread', None)
+      if exec_thread is not None:
+        thread_frame = sys._current_frames().get(exec_thread.ident)  # pylint: disable=protected-access
+        stack_trace = '\n'.join(
+            traceback.format_stack(thread_frame)) if thread_frame else ''
+      else:
+        stack_trace = '-NOT AVAILABLE-'
+
+      logging.warning(
+          '%s%s. Traceback:\n%s', state_lull_log, step_name_log, stack_trace)
+
   def process_bundle_progress(self, request, instruction_id):
     # It is an error to get progress for a not-in-flight bundle.
-    processor = self.bundle_processor_cache.lookup(
-        request.instruction_id)
+    processor = self.bundle_processor_cache.lookup(request.instruction_id)
+    if processor:
+      self._log_lull_in_bundle_processor(processor)
     return beam_fn_api_pb2.InstructionResponse(
         instruction_id=instruction_id,
         process_bundle_progress=beam_fn_api_pb2.ProcessBundleProgressResponse(
@@ -467,12 +501,12 @@ class GrpcStateHandlerFactory(StateHandlerFactory):
   Caches the created channels by ``state descriptor url``.
   """
 
-  def __init__(self, state_cache_size, credentials=None):
+  def __init__(self, state_cache, credentials=None):
     self._state_handler_cache = {}
     self._lock = threading.Lock()
     self._throwing_state_handler = ThrowingStateHandler()
     self._credentials = credentials
-    self._state_cache = StateCache(state_cache_size)
+    self._state_cache = state_cache
 
   def create_state_handler(self, api_service_descriptor):
     if not api_service_descriptor:
@@ -498,7 +532,7 @@ class GrpcStateHandlerFactory(StateHandlerFactory):
           # Add workerId to the grpc channel
           grpc_channel = grpc.intercept_channel(grpc_channel,
                                                 WorkerIdInterceptor())
-          self._state_handler_cache[url] = CachingMaterializingStateHandler(
+          self._state_handler_cache[url] = CachingStateHandler(
               self._state_cache,
               GrpcStateHandler(
                   beam_fn_api_pb2_grpc.BeamFnStateStub(grpc_channel)))
@@ -536,6 +570,7 @@ class GrpcStateHandler(object):
   _DONE = object()
 
   def __init__(self, state_stub):
+    self._lock = threading.Lock()
     self._state_stub = state_stub
     self._requests = queue.Queue()
     self._responses_by_id = {}
@@ -570,6 +605,7 @@ class GrpcStateHandler(object):
     def pull_responses():
       try:
         for response in responses:
+          # Popping an item from a dictionary is atomic in cPython
           future = self._responses_by_id.pop(response.id)
           future.set(response)
           if self._done:
@@ -609,7 +645,9 @@ class GrpcStateHandler(object):
   def _request(self, request):
     request.id = self._next_id()
     request.instruction_id = self._context.process_instruction_id
+    # Adding a new item to a dictionary is atomic in cPython
     self._responses_by_id[request.id] = future = _Future()
+    # Request queue is thread-safe
     self._requests.put(request)
     return future
 
@@ -628,11 +666,17 @@ class GrpcStateHandler(object):
       return response
 
   def _next_id(self):
-    self._last_id += 1
-    return str(self._last_id)
+    with self._lock:
+      # Use a lock here because this GrpcStateHandler is shared across all
+      # requests which have the same process bundle descriptor. State requests
+      # can concurrently access this section if a Runner uses threads / workers
+      # (aka "parallelism") to send data to this SdkHarness and its workers.
+      self._last_id += 1
+      request_id = self._last_id
+    return str(request_id)
 
 
-class CachingMaterializingStateHandler(object):
+class CachingStateHandler(object):
   """ A State handler which retrieves and caches state. """
 
   def __init__(self, global_state_cache, underlying_state):
@@ -654,6 +698,7 @@ class CachingMaterializingStateHandler(object):
         assert not user_state_cache_token
         user_state_cache_token = cache_token_struct.token
     try:
+      self._state_cache.initialize_metrics()
       self._context.cache_token = user_state_cache_token
       with self._underlying.process_instruction_id(bundle_id):
         yield

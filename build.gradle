@@ -19,7 +19,7 @@
 plugins {
   id 'base'
   // Enable publishing build scans
-  id 'com.gradle.build-scan' version '2.4' apply false
+  id 'com.gradle.build-scan' version '2.3' apply false
   // This plugin provides a task to determine which dependencies have updates.
   // Additionally, the plugin checks for updates to Gradle itself.
   //
@@ -96,15 +96,18 @@ rat {
     "ownership/**/*",
     "**/OWNERS",
 
-    // FIXME add license header
-    "project-mappings",
-    "deprecation-warning.txt",
-
     // Json doesn't support comments.
     "**/*.json",
 
     // Katas files
-    "learning/katas/*/IO/**/*.txt"
+    "learning/katas/**/course-remote-info.yaml",
+    "learning/katas/**/section-remote-info.yaml",
+    "learning/katas/**/lesson-remote-info.yaml",
+    "learning/katas/**/task-remote-info.yaml",
+    "learning/katas/*/IO/**/*.txt",
+
+    // Mockito extensions
+    "sdks/java/io/amazon-web-services2/src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker"
   ]
 
   // Add .gitignore excludes to the Apache Rat exclusion list. We re-create the behavior
@@ -141,7 +144,7 @@ task javaPreCommit() {
 }
 
 task javaPreCommitBeamZetaSQL() {
-  dependsOn ":sdks:java:extensions:sql:runZetaSQLTest"
+  dependsOn ":sdks:java:extensions:sql:zetasql:test"
 }
 
 task javaPreCommitPortabilityApi() {
@@ -207,7 +210,7 @@ task pythonPreCommit() {
 
 task pythonLintPreCommit() {
   dependsOn ":sdks:python:test-suites:tox:py2:lint"
-  dependsOn ":sdks:python:test-suites:tox:py35:lint"
+  dependsOn ":sdks:python:test-suites:tox:py37:lint"
 }
 
 task python2PostCommit() {

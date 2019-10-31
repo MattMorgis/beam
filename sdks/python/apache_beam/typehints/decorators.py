@@ -294,16 +294,22 @@ class IOTypeHints(object):
     """Removes outer Iterable (or equivalent) from output type.
 
     Only affects instances with simple output types, otherwise is a no-op.
+    Does not modify self.
 
     Example: Generator[Tuple(int, int)] becomes Tuple(int, int)
+
+    Returns:
+      A possible copy of this instance with a possibly different output type.
 
     Raises:
       ValueError if output type is simple and not iterable.
     """
     if not self.has_simple_output_type():
-      return
+      return self
     yielded_type = typehints.get_yielded_type(self.output_types[0][0])
-    self.output_types = ((yielded_type,), {})
+    res = self.copy()
+    res.output_types = ((yielded_type,), {})
+    return res
 
   def copy(self):
     return IOTypeHints(self.input_types, self.output_types)
@@ -440,7 +446,7 @@ def getcallargs_forhints_impl_py2(func, typeargs, typekwargs):
   # TODO(BEAM-5490): Reimplement getcallargs and stop relying on monkeypatch.
   inspect.getargspec = getfullargspec
   try:
-    callargs = inspect.getcallargs(func, *packed_typeargs, **typekwargs)
+    callargs = inspect.getcallargs(func, *packed_typeargs, **typekwargs)  # pylint: disable=deprecated-method
   except TypeError as e:
     raise TypeCheckError(e)
   finally:

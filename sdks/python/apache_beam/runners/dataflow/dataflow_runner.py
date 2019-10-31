@@ -23,6 +23,7 @@ to the Dataflow Service for remote execution by a worker.
 from __future__ import absolute_import
 from __future__ import division
 
+import base64
 import json
 import logging
 import sys
@@ -110,6 +111,9 @@ class DataflowRunner(PipelineRunner):
     # "executes" a pipeline.
     self._cache = cache if cache is not None else PValueCache()
     self._unique_step_id = 0
+
+  def is_fnapi_compatible(self):
+    return False
 
   def _get_unique_step_name(self):
     self._unique_step_id += 1
@@ -441,7 +445,7 @@ class DataflowRunner(PipelineRunner):
     dataflow_worker_jar = getattr(worker_options, 'dataflow_worker_jar', None)
     if dataflow_worker_jar is not None:
       if not apiclient._use_fnapi(options):
-        logging.warn(
+        logging.warning(
             'Typical end users should not use this worker jar feature. '
             'It can only be used when FnAPI is enabled.')
       else:
@@ -618,9 +622,12 @@ class DataflowRunner(PipelineRunner):
 
   def run_Impulse(self, transform_node, options):
     standard_options = options.view_as(StandardOptions)
+    debug_options = options.view_as(DebugOptions)
+    use_fn_api = (debug_options.experiments and
+                  'beam_fn_api' in debug_options.experiments)
     step = self._add_step(
         TransformNames.READ, transform_node.full_label, transform_node)
-    if standard_options.streaming:
+    if standard_options.streaming and not use_fn_api:
       step.add_property(PropertyNames.FORMAT, 'pubsub')
       step.add_property(PropertyNames.PUBSUB_SUBSCRIPTION, '_starting_signal/')
     else:
@@ -629,8 +636,15 @@ class DataflowRunner(PipelineRunner):
           coders.BytesCoder(),
           coders.coders.GlobalWindowCoder()).get_impl().encode_nested(
               window.GlobalWindows.windowed_value(b''))
+
+      if use_fn_api:
+        encoded_impulse_as_str = self.byte_array_to_json_string(
+            encoded_impulse_element)
+      else:
+        encoded_impulse_as_str = base64.b64encode(
+            encoded_impulse_element).decode('ascii')
       step.add_property(PropertyNames.IMPULSE_ELEMENT,
-                        self.byte_array_to_json_string(encoded_impulse_element))
+                        encoded_impulse_as_str)
 
     step.encoding = self._get_encoded_output_coder(transform_node)
     step.add_property(

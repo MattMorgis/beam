@@ -198,6 +198,10 @@ class PipelineRunner(object):
         'Execution of [%s] not implemented in runner %s.' % (
             transform_node.transform, self))
 
+  def is_fnapi_compatible(self):
+    """Whether to enable the beam_fn_api experiment by default."""
+    return True
+
 
 class PValueCache(object):
   """For internal use only; no backwards-compatibility guarantees.
@@ -380,6 +384,6 @@ class PipelineResult(object):
   # pylint: disable=unused-argument
   def aggregated_values(self, aggregator_or_name):
     """Return a dict of step names to values of the Aggregator."""
-    logging.warn('%s does not implement aggregated_values',
-                 self.__class__.__name__)
+    logging.warning('%s does not implement aggregated_values',
+                    self.__class__.__name__)
     return {}

@@ -56,6 +56,7 @@ import org.apache.beam.runners.core.TimerInternals.TimerData;
 import org.apache.beam.runners.core.construction.SerializablePipelineOptions;
 import org.apache.beam.runners.flink.FlinkPipelineOptions;
 import org.apache.beam.runners.flink.metrics.DoFnRunnerWithMetricsUpdate;
+import org.apache.beam.runners.flink.metrics.FlinkMetricContainer;
 import org.apache.beam.runners.flink.translation.types.CoderTypeSerializer;
 import org.apache.beam.runners.flink.translation.utils.FlinkClassloading;
 import org.apache.beam.runners.flink.translation.utils.NoopLock;
@@ -191,6 +192,9 @@ public class DoFnOperator<InputT, OutputT> extends AbstractStreamOperator<Window
   private transient long pushedBackWatermark;
 
   private transient PushedBackElementsHandler<WindowedValue<InputT>> pushedBackElementsHandler;
+
+  /** Metrics container for reporting Beam metrics to Flink (null if metrics are disabled). */
+  @Nullable transient FlinkMetricContainer flinkMetricContainer;
 
   /** Use an AtomicBoolean because we start/stop bundles by a timer thread (see below). */
   private transient AtomicBoolean bundleStarted;
@@ -439,7 +443,8 @@ public class DoFnOperator<InputT, OutputT> extends AbstractStreamOperator<Window
     doFnRunner = createWrappingDoFnRunner(doFnRunner);
 
     if (options.getEnableMetrics()) {
-      doFnRunner = new DoFnRunnerWithMetricsUpdate<>(stepName, doFnRunner, getRuntimeContext());
+      flinkMetricContainer = new FlinkMetricContainer(getRuntimeContext());
+      doFnRunner = new DoFnRunnerWithMetricsUpdate<>(stepName, doFnRunner, flinkMetricContainer);
     }
 
     bundleStarted = new AtomicBoolean(false);
@@ -625,7 +630,6 @@ public class DoFnOperator<InputT, OutputT> extends AbstractStreamOperator<Window
 
   @Override
   public void processWatermark1(Watermark mark) throws Exception {
-    checkInvokeStartBundle();
     // We do the check here because we are guaranteed to at least get the +Inf watermark on the
     // main input when the job finishes.
     if (currentSideInputWatermark >= BoundedWindow.TIMESTAMP_MAX_VALUE.getMillis()) {
@@ -672,7 +676,6 @@ public class DoFnOperator<InputT, OutputT> extends AbstractStreamOperator<Window
 
   @Override
   public void processWatermark2(Watermark mark) throws Exception {
-    checkInvokeStartBundle();
 
     setCurrentSideInputWatermark(mark.getTimestamp());
     if (mark.getTimestamp() >= BoundedWindow.TIMESTAMP_MAX_VALUE.getMillis()) {
@@ -693,6 +696,7 @@ public class DoFnOperator<InputT, OutputT> extends AbstractStreamOperator<Window
     Iterator<WindowedValue<InputT>> it = pushedBackElementsHandler.getElements().iterator();
 
     while (it.hasNext()) {
+      checkInvokeStartBundle();
       WindowedValue<InputT> element = it.next();
       // we need to set the correct key in case the operator is
       // a (keyed) window operator
@@ -785,8 +789,7 @@ public class DoFnOperator<InputT, OutputT> extends AbstractStreamOperator<Window
 
   @Override
   public void onEventTime(InternalTimer<ByteBuffer, TimerData> timer) throws Exception {
-    // We don't have to cal checkInvokeStartBundle() because it's already called in
-    // processWatermark*().
+    checkInvokeStartBundle();
     fireTimer(timer);
   }
 
