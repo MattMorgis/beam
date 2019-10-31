@@ -45,7 +45,7 @@ public class FlinkJobInvoker extends JobInvoker {
 
   private final FlinkJobServerDriver.FlinkServerConfiguration serverConfig;
 
-  private FlinkJobInvoker(FlinkJobServerDriver.FlinkServerConfiguration serverConfig) {
+  protected FlinkJobInvoker(FlinkJobServerDriver.FlinkServerConfiguration serverConfig) {
     super("flink-runner-job-invoker");
     this.serverConfig = serverConfig;
   }
@@ -66,13 +66,10 @@ public class FlinkJobInvoker extends JobInvoker {
         String.format("%s_%s", flinkOptions.getJobName(), UUID.randomUUID().toString());
 
     if (FlinkPipelineOptions.AUTO.equals(flinkOptions.getFlinkMaster())) {
-      flinkOptions.setFlinkMaster(serverConfig.getFlinkMasterUrl());
+      flinkOptions.setFlinkMaster(serverConfig.getFlinkMaster());
     }
 
     PortablePipelineOptions portableOptions = flinkOptions.as(PortablePipelineOptions.class);
-    if (portableOptions.getSdkWorkerParallelism() == 0L) {
-      portableOptions.setSdkWorkerParallelism(serverConfig.getSdkWorkerParallelism());
-    }
 
     PortablePipelineRunner pipelineRunner;
     if (portableOptions.getOutputExecutablePath() == null
@@ -93,7 +90,7 @@ public class FlinkJobInvoker extends JobInvoker {
         invocationId, retrievalToken, executorService, pipeline, flinkOptions, pipelineRunner);
   }
 
-  static JobInvocation createJobInvocation(
+  protected JobInvocation createJobInvocation(
       String invocationId,
       String retrievalToken,
       ListeningExecutorService executorService,

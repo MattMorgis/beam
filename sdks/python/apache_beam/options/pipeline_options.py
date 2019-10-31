@@ -814,7 +814,8 @@ class SetupOptions(PipelineOptions):
 
 class PortableOptions(PipelineOptions):
   """Portable options are common options expected to be understood by most of
-  the portable runners.
+  the portable runners. Should generally be kept in sync with
+  PortablePipelineOptions.java.
   """
   @classmethod
   def _add_argparse_args(cls, parser):
@@ -845,15 +846,18 @@ class PortableOptions(PipelineOptions):
               '"<ENV_VAL>"} }. All fields in the json are optional except '
               'command.'))
     parser.add_argument(
-        '--sdk_worker_parallelism', default=0,
+        '--sdk_worker_parallelism', default=1,
         help=('Sets the number of sdk worker processes that will run on each '
-              'worker node. Default is 0. If 0, it will be automatically set '
-              'by the runner by looking at different parameters (e.g. number '
-              'of CPU cores on the worker machine or configuration).'))
+              'worker node. Default is 1. If 0, a value will be chosen by the '
+              'runner.'))
     parser.add_argument(
         '--environment_cache_millis', default=0,
         help=('Duration in milliseconds for environment cache within a job. '
               '0 means no caching.'))
+    parser.add_argument(
+        '--output_executable_path', default=None,
+        help=('Create an executable jar at this path rather than running '
+              'the pipeline.'))
 
 
 class TestOptions(PipelineOptions):
