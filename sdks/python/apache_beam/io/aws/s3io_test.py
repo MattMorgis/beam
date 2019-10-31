@@ -252,10 +252,10 @@ class TestS3IO(unittest.TestCase):
     result = self.aws.copy_paths(zip(sources, destinations))
     self.assertEqual(len(result), len(sources))
 
-    for src, dest, err in result[:n_real_files]:
+    for _, _, err in result[:n_real_files]:
       self.assertTrue(err is None)
 
-    for src, dest, err in result[n_real_files:]:
+    for _, _, err in result[n_real_files:]:
       self.assertIsInstance(err, messages.S3ClientError)
 
     self.assertEqual(result[-3][2].code, 404)
@@ -588,7 +588,7 @@ class TestS3IO(unittest.TestCase):
           f.read(end - start + 1), contents[start:end + 1]
       )
       self.assertEqual(f.tell(), end + 1)
-    
+
     # Clean up
     self.aws.delete(file_name)
 
@@ -763,7 +763,7 @@ class TestS3IO(unittest.TestCase):
           set(expected_file_names))
 
     # Clean up
-    for (object_name, size) in objects: 
+    for (object_name, size) in objects:
       self.aws.delete(self.TEST_DATA_PATH + object_name)
 
 
