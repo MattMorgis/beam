@@ -173,9 +173,10 @@ class S3FileSystem(FileSystem):
       ``BeamIOError`` if any of the copy operations fail
     """
     if not len(source_file_names) == len(destination_file_names):
-      raise BeamIOError('Unable to copy unequal number of sources and destinations')
-    return s3io.S3IO().copy_paths(zip(source_file_names,
-                                      destination_file_names))
+      message = 'Unable to copy unequal number of sources and destinations'
+      raise BeamIOError(message)
+    src_dest_pairs = list(zip(source_file_names, destination_file_names))
+    return s3io.S3IO().copy_paths(src_dest_pairs)
 
   def rename(self, source_file_names, destination_file_names):
     """Rename the files at the source list to the destination list.
@@ -189,7 +190,8 @@ class S3FileSystem(FileSystem):
       ``BeamIOError`` if any of the rename operations fail
     """
     if not len(source_file_names) == len(destination_file_names):
-      raise BeamIOError('Unable to rename unequal number of sources and destinations')
+      message = 'Unable to copy unequal number of sources and destinations'
+      raise BeamIOError(message)
     results = s3io.S3IO().rename_files(paths)
     exceptions = {path: error for (path, error) in results
                   if error is not None}

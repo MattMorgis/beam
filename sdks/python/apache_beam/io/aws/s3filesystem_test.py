@@ -218,7 +218,7 @@ class S3FileSystemTest(unittest.TestCase):
         (problematic_directory, exception),
         ('s3://bucket/object1', None),
         ('s3://bucket/object2', None)
-      ]
+    ]
     s3io_mock.size.return_value = 0
     files = [
         problematic_directory,

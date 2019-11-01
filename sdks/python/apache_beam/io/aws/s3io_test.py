@@ -241,7 +241,7 @@ class TestS3IO(unittest.TestCase):
         to_path + 'fake_directory_2'
     ]
 
-    result = self.aws.copy_paths(zip(sources, destinations))
+    result = self.aws.copy_paths(list(zip(sources, destinations)))
     self.assertEqual(len(result), len(sources))
 
     for _, _, err in result[:n_real_files]:
