@@ -177,7 +177,8 @@ class S3FileSystemTest(unittest.TestCase):
     # Issue file copy
     self.fs.copy(sources, destinations)
 
-    s3io_mock.copy_paths.assert_called_once()
+    src_dest_pairs = list(zip(sources, destinations))
+    s3io_mock.copy_paths.assert_called_once_with(src_dest_pairs)
 
   def test_copy_file_error(self):
     # Prepare mocks.
@@ -204,7 +205,7 @@ class S3FileSystemTest(unittest.TestCase):
 
     # Issue batch delete.
     self.fs.delete(files)
-    s3io_mock.delete_paths.assert_called()
+    s3io_mock.delete_paths.assert_called_once_with(files)
 
   def test_delete_error(self):
     # Prepare mocks.
@@ -233,6 +234,21 @@ class S3FileSystemTest(unittest.TestCase):
       self.fs.delete(files)
     self.assertEqual(error.exception.exception_details, expected_results)
     s3io_mock.delete_paths.assert_called()
+
+  def test_rename(self):
+    # Prepare mocks.
+    s3io_mock = mock.MagicMock()
+    s3filesystem.s3io.S3IO = lambda: s3io_mock
+
+    sources = ['s3://bucket/from1', 's3://bucket/from2']
+    destinations = ['s3://bucket/to1', 's3://bucket/to2']
+
+    # Issue file copy
+    self.fs.rename(sources, destinations)
+
+    src_dest_pairs = list(zip(sources, destinations))
+    s3io_mock.rename_files.assert_called_once_with(src_dest_pairs)
+
 
 
 if __name__ == '__main__':
