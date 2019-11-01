@@ -247,3 +247,7 @@ class ClientErrorTest(unittest.TestCase):
     except Exception as e:
       self.assertIsInstance(e, messages.S3ClientError)
       self.assertEqual(e.code, 400)
+
+if __name__ == '__main__':
+  logging.getLogger().setLevel(logging.INFO)
+  unittest.main()
