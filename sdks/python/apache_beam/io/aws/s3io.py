@@ -27,6 +27,7 @@ import time
 import traceback
 from builtins import object
 
+from apache_beam.io.aws.clients.s3 import messages
 from apache_beam.io.filesystemio import Downloader
 from apache_beam.io.filesystemio import DownloaderStream
 from apache_beam.io.filesystemio import Uploader
@@ -37,9 +38,9 @@ try:
   # pylint: disable=wrong-import-order, wrong-import-position
   # pylint: disable=ungrouped-imports
   from apache_beam.io.aws.clients.s3 import boto3_client
-  from apache_beam.io.aws.clients.s3 import messages
+  BOTO3_INSTALLED = True
 except ImportError:
-  raise ImportError('Missing `boto3` requirement')
+  BOTO3_INSTALLED = False
 
 MAX_BATCH_OPERATION_SIZE = 100
 
@@ -58,8 +59,12 @@ class S3IO(object):
   def __init__(self, client=None):
     if client is not None:
       self.client = client
-    else:
+    elif BOTO3_INSTALLED:
       self.client = boto3_client.Client()
+    else:
+      message = 'AWS dependencies are not installed, and no alternative ' \
+      'client was provided to S3IO.'
+      raise RuntimeError(message)
 
   def open(self,
            filename,
