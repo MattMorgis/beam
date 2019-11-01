@@ -22,6 +22,7 @@ from __future__ import absolute_import
 
 import logging
 import unittest
+
 import mock
 
 from apache_beam.io.aws.clients.s3 import messages
