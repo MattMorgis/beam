@@ -243,7 +243,7 @@ class S3IO(object):
         self.copy(entry, dest + rel_path)
         results.append((entry, dest + rel_path, None))
       except messages.S3ClientError as e:
-        results.append((entry, dest_path, e))
+        results.append((entry, dest + rel_path, e))
     return results
 
   @retry.with_exponential_backoff(

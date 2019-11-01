@@ -190,13 +190,14 @@ class S3FileSystem(FileSystem):
       ``BeamIOError`` if any of the rename operations fail
     """
     if not len(source_file_names) == len(destination_file_names):
-      message = 'Unable to copy unequal number of sources and destinations'
+      message = 'Unable to rename unequal number of sources and destinations'
       raise BeamIOError(message)
-    results = s3io.S3IO().rename_files(paths)
-    exceptions = {path: error for (path, error) in results
+    src_dest_pairs = list(zip(source_file_names, destination_file_names))
+    results = s3io.S3IO().rename_files(src_dest_pairs)
+    exceptions = {(src, dest): error for (src, dest, error) in results
                   if error is not None}
     if exceptions:
-      raise BeamIOError("Delete operation failed", exceptions)
+      raise BeamIOError("Rename operation failed", exceptions)
 
   def exists(self, path):
     """Check if the provided path exists on the FileSystem.
