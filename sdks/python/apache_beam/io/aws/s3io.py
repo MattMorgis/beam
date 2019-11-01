@@ -20,8 +20,8 @@
 from __future__ import absolute_import
 
 import errno
-import logging
 import io
+import logging
 import re
 import time
 import traceback

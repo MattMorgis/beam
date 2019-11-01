@@ -17,10 +17,10 @@
 
 from __future__ import absolute_import
 
-from apache_beam.io.aws.clients.s3 import messages
 import datetime
 import time
 
+from apache_beam.io.aws.clients.s3 import messages
 
 class FakeFile(object):
 

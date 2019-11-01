@@ -17,15 +17,15 @@
 """Tests for S3 client."""
 from __future__ import absolute_import
 
-import os
 import logging
+import os
 import random
 import time
 import unittest
 
+from apache_beam.io.aws import s3io
 from apache_beam.io.aws.clients.s3 import fake_client
 from apache_beam.io.aws.clients.s3 import messages
-from apache_beam.io.aws import s3io
 
 class TestS3PathParser(unittest.TestCase):
 

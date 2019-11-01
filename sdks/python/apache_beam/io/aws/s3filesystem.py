@@ -20,12 +20,12 @@ from __future__ import absolute_import
 
 from future.utils import iteritems
 
+from apache_beam.io.aws import s3io
 from apache_beam.io.filesystem import BeamIOError
 from apache_beam.io.filesystem import CompressedFile
 from apache_beam.io.filesystem import CompressionTypes
 from apache_beam.io.filesystem import FileMetadata
 from apache_beam.io.filesystem import FileSystem
-from apache_beam.io.aws import s3io
 
 __all__ = ['S3FileSystem']
 
