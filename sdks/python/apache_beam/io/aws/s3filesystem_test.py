@@ -24,10 +24,10 @@ import logging
 import unittest
 import mock
 
+from apache_beam.io.aws.clients.s3 import messages
 from apache_beam.io.filesystem import BeamIOError
 from apache_beam.io.filesystem import FileMetadata
 from apache_beam.options.pipeline_options import PipelineOptions
-from apache_beam.io.aws.clients.s3 import messages
 
 # Protect against environments where boto3 library is not available.
 # pylint: disable=wrong-import-order, wrong-import-position

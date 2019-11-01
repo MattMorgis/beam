@@ -14,11 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import unittest
 
-import os
-from apache_beam.io.aws.clients.s3 import fake_client, messages
 from apache_beam.io.aws import s3io
+from apache_beam.io.aws.clients.s3 import fake_client
+from apache_beam.io.aws.clients.s3 import messages
 
 class ClientErrorTest(unittest.TestCase):
 
