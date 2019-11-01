@@ -50,7 +50,7 @@ except ImportError as e:
   HttpError = None
 
 # Protect against environments where aws tools are not available.
-# pylint: disable=wrong-import-order, wrong-import-position
+# pylint: disable=wrong-import-order, wrong-import-position, ungrouped-imports
 try:
   from apache_beam.io.aws.clients.s3.messages import S3ClientError
 except ImportError:
