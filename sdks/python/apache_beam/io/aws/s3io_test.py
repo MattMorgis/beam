@@ -27,6 +27,7 @@ from apache_beam.io.aws import s3io
 from apache_beam.io.aws.clients.s3 import fake_client
 from apache_beam.io.aws.clients.s3 import messages
 
+
 class TestS3PathParser(unittest.TestCase):
 
   BAD_S3_PATHS = [

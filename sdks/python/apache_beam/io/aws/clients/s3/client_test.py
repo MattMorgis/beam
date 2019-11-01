@@ -21,6 +21,7 @@ from apache_beam.io.aws import s3io
 from apache_beam.io.aws.clients.s3 import fake_client
 from apache_beam.io.aws.clients.s3 import messages
 
+
 class ClientErrorTest(unittest.TestCase):
 
   def setUp(self):

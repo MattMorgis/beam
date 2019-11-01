@@ -22,6 +22,7 @@ import time
 
 from apache_beam.io.aws.clients.s3 import messages
 
+
 class FakeFile(object):
 
   def __init__(self, bucket, key, contents, etag=None):
