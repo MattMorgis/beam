@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import os
+import logging
 import unittest
 
 from apache_beam.io.aws import s3io
