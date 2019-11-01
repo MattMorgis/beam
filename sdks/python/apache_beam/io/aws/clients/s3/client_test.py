@@ -1,16 +1,24 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 import unittest
 
 import os
 from apache_beam.io.aws.clients.s3 import fake_client, messages
-
-# Protect against environments where boto3 library is not available.
-# pylint: disable=wrong-import-order, wrong-import-position
-try:
-  from apache_beam.io.aws.clients.s3 import boto3_client
-  from apache_beam.io.aws import s3io
-except ImportError:
-  pass
-# pylint: enable=wrong-import-order, wrong-import-position
+from apache_beam.io.aws import s3io
 
 class ClientErrorTest(unittest.TestCase):
 
@@ -32,10 +40,10 @@ class ClientErrorTest(unittest.TestCase):
       self.client = fake_client.FakeS3Client()
       test_data_bucket, _ = s3io.parse_s3_path(self.TEST_DATA_PATH)
       self.client.known_buckets.add(test_data_bucket)
+      self.aws = s3io.S3IO(self.client)
     else:
-      self.client = boto3_client.Client()
+      self.aws = s3io.S3IO()
 
-    self.aws = s3io.S3IO(self.client)
 
   def test_get_object_metadata(self):
 

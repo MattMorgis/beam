@@ -25,15 +25,7 @@ import unittest
 
 from apache_beam.io.aws.clients.s3 import fake_client
 from apache_beam.io.aws.clients.s3 import messages
-
-# Protect against environments where boto3 library is not available.
-# pylint: disable=wrong-import-order, wrong-import-position
-try:
-  from apache_beam.io.aws import s3io
-except ImportError:
-  pass
-# pylint: enable=wrong-import-order, wrong-import-position
-
+from apache_beam.io.aws import s3io
 
 class TestS3PathParser(unittest.TestCase):
 
