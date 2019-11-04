@@ -77,7 +77,8 @@ class S3FileSystemTest(unittest.TestCase):
     with self.assertRaises(ValueError):
       self.fs.split('/no/s3/prefix')
 
-  def test_match_multiples(self):
+  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
+  def test_match_multiples(self, unused_mock_arg):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     s3filesystem.s3io.S3IO = lambda: s3io_mock
@@ -96,7 +97,8 @@ class S3FileSystemTest(unittest.TestCase):
         expected_results)
     s3io_mock.list_prefix.assert_called_once_with('s3://bucket/')
 
-  def test_match_multiples_limit(self):
+  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
+  def test_match_multiples_limit(self, unused_mock_arg):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     limit = 1
@@ -116,7 +118,8 @@ class S3FileSystemTest(unittest.TestCase):
         limit)
     s3io_mock.list_prefix.assert_called_once_with('s3://bucket/')
 
-  def test_match_multiples_error(self):
+  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
+  def test_match_multiples_error(self, unused_mock_arg):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     s3filesystem.s3io.S3IO = lambda: s3io_mock
@@ -130,7 +133,8 @@ class S3FileSystemTest(unittest.TestCase):
                      r's3://bucket/.*%s' % exception)
     s3io_mock.list_prefix.assert_called_once_with('s3://bucket/')
 
-  def test_match_multiple_patterns(self):
+  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
+  def test_match_multiple_patterns(self, unused_mock_arg):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     s3filesystem.s3io.S3IO = lambda: s3io_mock
@@ -147,7 +151,8 @@ class S3FileSystemTest(unittest.TestCase):
         [mr.metadata_list for mr in result],
         expected_results)
 
-  def test_create(self):
+  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
+  def test_create(self, unused_mock_arg):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     s3filesystem.s3io.S3IO = lambda: s3io_mock
@@ -157,7 +162,8 @@ class S3FileSystemTest(unittest.TestCase):
     s3io_mock.open.assert_called_once_with(
         's3://bucket/from1', 'wb', mime_type='application/octet-stream')
 
-  def test_open(self):
+  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
+  def test_open(self, unused_mock_arg):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     s3filesystem.s3io.S3IO = lambda: s3io_mock
@@ -167,7 +173,8 @@ class S3FileSystemTest(unittest.TestCase):
     s3io_mock.open.assert_called_once_with(
         's3://bucket/from1', 'rb', mime_type='application/octet-stream')
 
-  def test_copy_file(self):
+  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
+  def test_copy_file(self, unused_mock_arg):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     s3filesystem.s3io.S3IO = lambda: s3io_mock
@@ -181,7 +188,8 @@ class S3FileSystemTest(unittest.TestCase):
     src_dest_pairs = list(zip(sources, destinations))
     s3io_mock.copy_paths.assert_called_once_with(src_dest_pairs)
 
-  def test_copy_file_error(self):
+  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
+  def test_copy_file_error(self, unused_mock_arg):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     s3filesystem.s3io.S3IO = lambda: s3io_mock
@@ -193,7 +201,8 @@ class S3FileSystemTest(unittest.TestCase):
     with self.assertRaises(BeamIOError):
       self.fs.copy(sources, destinations)
 
-  def test_delete(self):
+  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
+  def test_delete(self, unused_mock_arg):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     s3filesystem.s3io.S3IO = lambda: s3io_mock
@@ -208,7 +217,8 @@ class S3FileSystemTest(unittest.TestCase):
     self.fs.delete(files)
     s3io_mock.delete_paths.assert_called_once_with(files)
 
-  def test_delete_error(self):
+  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
+  def test_delete_error(self, unused_mock_arg):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     s3filesystem.s3io.S3IO = lambda: s3io_mock
@@ -236,7 +246,8 @@ class S3FileSystemTest(unittest.TestCase):
     self.assertEqual(error.exception.exception_details, expected_results)
     s3io_mock.delete_paths.assert_called()
 
-  def test_rename(self):
+  @mock.patch('apache_beam.io.aws.s3filesystem.s3io')
+  def test_rename(self, unused_mock_arg):
     # Prepare mocks.
     s3io_mock = mock.MagicMock()
     s3filesystem.s3io.S3IO = lambda: s3io_mock
